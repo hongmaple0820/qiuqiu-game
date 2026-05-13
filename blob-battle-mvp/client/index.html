@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>球球大作战：智械分身 - MVP</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Arial', sans-serif; 
+            background: #1a1a2e; 
+            color: white; 
+            overflow: hidden;
+        }
+        #gameCanvas { 
+            display: block; 
+            margin: 0 auto; 
+            background: #16213e; 
+            border: 2px solid #0f3460;
+        }
+        #ui {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #0f3460;
+        }
+        #chatInput {
+            width: 70%;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            background: #0f3460;
+            color: white;
+            font-size: 14px;
+        }
+        #sendBtn {
+            width: 25%;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            background: #e94560;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            margin-left: 2%;
+        }
+        #sendBtn:hover { background: #ff6b6b; }
+        #status {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+        #log {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 300px;
+            max-height: 200px;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+        .log-entry { margin: 5px 0; padding: 3px; border-bottom: 1px solid #333; }
+        .log-agent { color: #4ecdc4; }
+        .log-system { color: #ffe66d; }
+        .log-player { color: #ff6b6b; }
+        h2 { text-align: center; margin-bottom: 10px; color: #4ecdc4; }
+        .instructions {
+            position: absolute;
+            top: 60px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 11px;
+            max-width: 250px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    
+    <div id="status">
+        <div>🔴 状态：<span id="connectionStatus">连接中...</span></div>
+        <div>🎮 玩家：<span id="playerId">-</span></div>
+        <div>🤖 AI: <span id="aiStatus">等待连接</span></div>
+    </div>
+
+    <div class="instructions">
+        <strong>操作说明:</strong><br>
+        • 鼠标移动控制蓝色球（本体）<br>
+        • 红色球是你的AI分身<br>
+        • 绿色球是食物<br>
+        • 紫色球是敌人<br>
+        • 底部输入框发送指令给AI<br>
+        • 指令示例：保护我、进攻、集合、去吃食物
+    </div>
+
+    <div id="log"></div>
+
+    <div id="ui">
+        <h2>🤖 指挥你的AI分身</h2>
+        <input type="text" id="chatInput" placeholder="输入指令：保护我 / 进攻 / 集合..." />
+        <button id="sendBtn">发送指令</button>
+    </div>
+
+    <script>
+        // 游戏配置
+        const CONFIG = {
+            serverUrl: 'ws://localhost:8080',
+            canvasWidth: 800,
+            canvasHeight: 600,
+            tickRate: 100
+        };
+
+        // 游戏状态
+        const state = {
+            ws: null,
+            playerId: null,
+            entities: [],
+            master: null,
+            agent: null,
+            connected: false,
+            mouseX: CONFIG.canvasWidth / 2,
+            mouseY: CONFIG.canvasHeight / 2
+        };
+
+        // DOM 元素
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const statusEl = document.getElementById('connectionStatus');
+        const playerIdEl = document.getElementById('playerId');
+        const aiStatusEl = document.getElementById('aiStatus');
+        const chatInput = document.getElementById('chatInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const logEl = document.getElementById('log');
+
+        // 日志功能
+        function addLog(message, type = 'system') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            const time = new Date().toLocaleTimeString();
+            entry.textContent = `[${time}] ${message}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        // 连接服务器
+        function connect() {
+            state.ws = new WebSocket(CONFIG.serverUrl);
+            
+            state.ws.onopen = () => {
+                state.connected = true;
+                statusEl.textContent = '✅ 已连接';
+                statusEl.style.color = '#4ecdc4';
+                addLog('连接到游戏服务器', 'system');
+                
+                // 发送初始化请求
+                const initMsg = {
+                    proto_id: 9001,
+                    timestamp: Date.now(),
+                    data: { player_name: 'Player_' + Math.floor(Math.random() * 1000) }
+                };
+                state.ws.send(JSON.stringify(initMsg));
+            };
+
+            state.ws.onclose = () => {
+                state.connected = false;
+                statusEl.textContent = '❌ 已断开';
+                statusEl.style.color = '#ff6b6b';
+                aiStatusEl.textContent = '断开连接';
+                addLog('与服务器断开连接', 'system');
+                setTimeout(connect, 3000);
+            };
+
+            state.ws.onerror = (error) => {
+                addLog('连接错误: ' + error, 'system');
+            };
+
+            state.ws.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    handleMessage(message);
+                } catch (e) {
+                    console.error('解析消息失败:', e);
+                }
+            };
+        }
+
+        // 处理消息
+        function handleMessage(message) {
+            const { proto_id, data } = message;
+
+            if (proto_id === 9001) {
+                // 欢迎包
+                state.playerId = data.player_id;
+                playerIdEl.textContent = state.playerId;
+                addLog(`玩家ID: ${state.playerId}`, 'system');
+            } else if (proto_id === 1001) {
+                // 位置同步包
+                if (data.entities) {
+                    state.entities = data.entities;
+                    
+                    // 找到主人和Agent
+                    state.master = data.entities.find(e => e.type === 'master');
+                    state.agent = data.entities.find(e => e.type === 'agent');
+                    
+                    if (state.agent) {
+                        aiStatusEl.textContent = `在线 (${state.agent.name})`;
+                        aiStatusEl.style.color = '#4ecdc4';
+                    }
+                }
+            } else if (proto_id === 3001) {
+                // AI决策包
+                if (data.decision_reason) {
+                    addLog(`AI: ${data.decision_reason}`, 'agent');
+                    if (data.chat_response) {
+                        addLog(`AI说: "${data.chat_response}"`, 'agent');
+                    }
+                }
+            }
+        }
+
+        // 发送聊天指令
+        function sendCommand() {
+            const command = chatInput.value.trim();
+            if (!command || !state.connected) return;
+
+            const msg = {
+                proto_id: 2001,
+                timestamp: Date.now(),
+                data: {
+                    sender_id: state.playerId,
+                    target_id: state.agent ? state.agent.entity_id : 'agent_01',
+                    msg_type: 'command',
+                    content: command
+                }
+            };
+
+            state.ws.send(JSON.stringify(msg));
+            addLog(`你: "${command}"`, 'player');
+            chatInput.value = '';
+        }
+
+        // 渲染游戏
+        function render() {
+            // 清空画布
+            ctx.fillStyle = '#16213e';
+            ctx.fillRect(0, 0, CONFIG.canvasWidth, CONFIG.canvasHeight);
+
+            // 绘制网格背景
+            ctx.strokeStyle = '#1a1a2e';
+            ctx.lineWidth = 1;
+            for (let x = 0; x < CONFIG.canvasWidth; x += 40) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, CONFIG.canvasHeight);
+                ctx.stroke();
+            }
+            for (let y = 0; y < CONFIG.canvasHeight; y += 40) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(CONFIG.canvasWidth, y);
+                ctx.stroke();
+            }
+
+            // 绘制所有实体
+            state.entities.forEach(entity => {
+                const { x, y, radius, type, name, skin_id } = entity;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                
+                // 根据类型设置颜色
+                if (type === 'master') {
+                    ctx.fillStyle = '#4ecdc4'; // 青色 - 玩家本体
+                } else if (type === 'agent') {
+                    ctx.fillStyle = '#ff6b6b'; // 红色 - AI分身
+                } else if (type === 'food') {
+                    ctx.fillStyle = '#ffe66d'; // 黄色 - 食物
+                } else if (type === 'enemy') {
+                    ctx.fillStyle = '#a64ac9'; // 紫色 - 敌人
+                } else {
+                    ctx.fillStyle = '#888888';
+                }
+                
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // 绘制名字
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(name, x, y - radius - 5);
+
+                // 如果是Agent，绘制连线到Master
+                if (type === 'agent' && state.master) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                    ctx.lineTo(state.master.x, state.master.y);
+                    ctx.strokeStyle = 'rgba(255, 107, 107, 0.5)';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 5]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+            });
+
+            requestAnimationFrame(render);
+        }
+
+        // 鼠标控制
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            state.mouseX = e.clientX - rect.left;
+            state.mouseY = e.clientY - rect.top;
+
+            // 如果已连接且有master，发送移动指令
+            if (state.connected && state.master) {
+                const moveMsg = {
+                    proto_id: 1001,
+                    timestamp: Date.now(),
+                    data: {
+                        player_id: state.playerId,
+                        entities: [{
+                            entity_id: state.master.entity_id,
+                            type: 'master',
+                            x: state.mouseX,
+                            y: state.mouseY,
+                            radius: state.master.radius,
+                            vx: 0,
+                            vy: 0,
+                            skin_id: state.master.skin_id,
+                            name: state.master.name,
+                            status: 'moving'
+                        }]
+                    }
+                };
+                state.ws.send(JSON.stringify(moveMsg));
+            }
+        });
+
+        // 事件监听
+        sendBtn.addEventListener('click', sendCommand);
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendCommand();
+        });
+
+        // 初始化
+        addLog('游戏初始化...', 'system');
+        connect();
+        render();
+    </script>
+</body>
+</html>
