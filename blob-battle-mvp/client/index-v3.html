@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>球球大作战 V3 - 优化版</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #0a0a0a; color: white; overflow: hidden; }
+        #gameCanvas { display: block; background: radial-gradient(ellipse at center, #1a1a3e 0%, #0a0a1a 100%); cursor: crosshair; }
+        
+        #skinSelector {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: linear-gradient(135deg, rgba(20,20,50,0.95) 0%, rgba(10,10,30,0.98) 100%);
+            padding: 40px; border-radius: 20px; z-index: 1000;
+            max-width: 700px; max-height: 85vh; overflow-y: auto;
+            border: 2px solid #4ecdc4; box-shadow: 0 0 50px rgba(78,205,196,0.3);
+        }
+        
+        .skin-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .skin-item {
+            background: #1a1a2e;
+            border-radius: 12px;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 3px solid transparent;
+        }
+        
+        .skin-item:hover { transform: translateY(-5px); }
+        .skin-item.selected { border-color: #4ecdc4; }
+        .skin-item.locked { opacity: 0.5; cursor: not-allowed; }
+        
+        .skin-preview {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            margin: 0 auto 10px;
+            border: 3px solid white;
+        }
+        
+        .skin-name { font-weight: bold; font-size: 13px; margin-bottom: 5px; }
+        .skin-status { font-size: 11px; color: #888; }
+        
+        #startBtn {
+            background: linear-gradient(135deg, #4ecdc4 0%, #44a082 100%);
+            border: none;
+            padding: 15px 40px;
+            border-radius: 30px;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            display: block;
+            margin: 20px auto 0;
+        }
+        
+        #startBtn:hover { transform: scale(1.05); }
+        
+        /* 游戏 UI 样式（同 V2）*/
+        #ui { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 650px; background: rgba(0,0,0,0.85); padding: 15px; border-radius: 10px; z-index: 100; }
+        #status { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.85); padding: 15px; border-radius: 8px; font-size: 13px; z-index: 100; }
+        #scoreBoard { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.85); padding: 15px; border-radius: 8px; min-width: 160px; z-index: 100; }
+        .quick-btn { display: inline-block; padding: 6px 12px; margin: 2px; background: #1a1a2e; border: 1px solid #0f3460; border-radius: 4px; color: #4ecdc4; cursor: pointer; font-size: 12px; }
+        .quick-btn:hover { background: #0f3460; }
+        #controls { position: absolute; bottom: 190px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 8px; z-index: 100; }
+        .action-btn { display: inline-block; padding: 10px 20px; margin: 0 5px; border: none; border-radius: 8px; color: white; cursor: pointer; font-size: 13px; font-weight: bold; }
+        .action-btn.split { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .action-btn.eject { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- 帮助按钮 -->
+    <button id="helpBtn" onclick="showHelp()" style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); border: 1px solid #4ecdc4; color: #4ecdc4; padding: 8px 20px; border-radius: 20px; cursor: pointer; z-index: 100;">帮助</button>
+    
+    <!-- 帮助弹窗 -->
+    <div id="helpModal" onclick="hideHelp(event)" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 2000; justify-content: center; align-items: center;">
+        <div class="help-content" onclick="event.stopPropagation()" style="background: linear-gradient(135deg, #1a1a2e 0%, #0f0f1a 100%); padding: 40px; border-radius: 20px; max-width: 600px; border: 2px solid #4ecdc4;">
+            <h2 style="color: #4ecdc4; margin-bottom: 20px; text-align: center;">游戏指南</h2>
+            <div style="margin: 20px 0;">
+                <h3 style="color: #ffd700; margin-bottom: 10px;">游戏目标</h3>
+                <ul style="list-style: none; padding: 0;">
+                    <li style="margin: 8px 0;">控制球球吃掉食物和其他小球</li>
+                    <li style="margin: 8px 0;">变大变强，登上排行榜榜首</li>
+                    <li style="margin: 8px 0;">与AI伙伴配合，击败敌人</li>
+                </ul>
+            </div>
+            <div style="margin: 20px 0;">
+                <h3 style="color: #ffd700; margin-bottom: 10px;">操作说明</h3>
+                <ul style="list-style: none; padding: 0;">
+                    <li style="margin: 8px 0;"><strong>鼠标移动</strong> - 控制球球移动</li>
+                    <li style="margin: 8px 0;"><strong>点击/W键</strong> - 分裂成两个球球</li>
+                    <li style="margin: 8px 0;"><strong>S键</strong> - 吐出孢子攻击</li>
+                </ul>
+            </div>
+            <button onclick="hideHelp()" style="background: #4ecdc4; border: none; padding: 10px 30px; border-radius: 20px; color: white; cursor: pointer; margin-top: 20px;">关闭</button>
+        </div>
+    </div>
+    
+    <!-- 皮肤选择界面 -->
+    <div id="skinSelector">
+        <h2 style="text-align: center; margin-bottom: 10px;">🎨 选择你的皮肤</h2>
+        <p style="text-align: center; color: #888; font-size: 13px;">选择你喜欢的颜色和外观</p>
+        
+        <div class="skin-grid" id="skinGrid"></div>
+        
+        <button id="startBtn" onclick="startGame()">🎮 开始游戏</button>
+    </div>
+    
+    <!-- 游戏 UI（同 V2） -->
+    <div id="status">
+        <div>🔴 状态：<span id="connectionStatus">准备中</span></div>
+        <div>🎮 玩家：<span id="playerId">-</span></div>
+        <div>📏 质量：<span id="mass">20</span></div>
+        <div id="teamDisplay" style="display: none;">👥 队伍：<span id="teamName">-</span></div>
+    </div>
+    
+    <div id="scoreBoard">
+        <h3 style="color: #4ecdc4; margin-bottom: 10px; font-size: 14px;">🏆 排行榜</h3>
+        <div id="leaderboard">-</div>
+        <div id="teamScoreBoard" style="display: none; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 10px;">
+            <h3 style="color: #ffd700; font-size: 12px;">团队比分</h3>
+            <div id="teamScores">-</div>
+        </div>
+    </div>
+    
+    <div id="controls">
+        <button class="action-btn split" onclick="split()">⚡ 分裂 (W)</button>
+        <button class="action-btn eject" onclick="ejectMass()">💫 吐孢子 (S)</button>
+    </div>
+    
+    <!-- 移动端虚拟摇杆 -->
+    <div id="mobileControls" style="display: none;">
+        <div id="joystickZone" style="position: absolute; bottom: 50px; left: 50px; width: 120px; height: 120px; z-index: 100;">
+            <div id="joystickBase" style="position: absolute; width: 120px; height: 120px; background: rgba(255,255,255,0.2); border: 3px solid rgba(255,255,255,0.5); border-radius: 50%;"></div>
+            <div id="joystick" style="position: absolute; width: 50px; height: 50px; background: rgba(78,205,196,0.8); border: 2px solid white; border-radius: 50%; top: 35px; left: 35px;"></div>
+        </div>
+        <button id="mobileSplit" style="position: absolute; bottom: 80px; right: 30px; width: 80px; height: 80px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border: 3px solid white; border-radius: 50%; color: white; font-size: 28px; z-index: 100; cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: none;">⚡</button>
+        <button id="mobileEject" style="position: absolute; bottom: 180px; right: 30px; width: 60px; height: 60px; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); border: 3px solid white; border-radius: 50%; color: white; font-size: 24px; z-index: 100; cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: none;">💫</button>
+    </div>
+    
+    <div id="ui">
+        <div style="margin-bottom: 8px;">
+            <span class="quick-btn" onclick="quickCommand('保护我')">🛡️ 保护</span>
+            <span class="quick-btn" onclick="quickCommand('进攻')">⚔️ 进攻</span>
+            <span class="quick-btn" onclick="quickCommand('集合')">👥 集合</span>
+        </div>
+        <input type="text" id="chatInput" placeholder="输入指令..." style="width: 65%; padding: 12px; border: 2px solid #1a1a2e; border-radius: 5px; background: #0f3460; color: white;" />
+        <button id="sendBtn" onclick="sendCommand()" style="width: 20%; padding: 12px; border: none; border-radius: 5px; background: #e94560; color: white; cursor: pointer; margin-left: 2%;">发送</button>
+    </div>
+
+    <script src="audio.js"></script>
+    <script>
+        const CONFIG = { 
+            serverUrl: (() => {
+                const hostname = window.location.hostname;
+                if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                    return 'ws://localhost:8082';
+                }
+                // 预览环境 - 从 HTTP 域名派生 WebSocket 域名
+                return `wss://${hostname.replace('8083-', '8082-')}`;
+            })()
+        };
+        const POWERUPS = {
+            speed: { name: '加速', color: '#00ff00', icon: '⚡' },
+            shield: { name: '护盾', color: '#0088ff', icon: '🛡️' },
+            magnet: { name: '磁力', color: '#ff00ff', icon: '🧲' },
+            grow: { name: '生长', color: '#ff8800', icon: '📈' }
+        };
+        const SKINS = {
+            blue: { color: '#4ecdc4', name: '经典蓝' },
+            red: { color: '#ff6b6b', name: '热情红' },
+            green: { color: '#51cf66', name: '自然绿' },
+            purple: { color: '#a64ac9', name: '神秘紫' },
+            yellow: { color: '#fcc419', name: '阳光黄' },
+            orange: { color: '#ff922b', name: '活力橙' },
+            gold: { color: '#ffd700', name: '黄金传说', locked: true, requirement: '达到50质量' },
+            rainbow: { color: 'rainbow', name: '彩虹渐变', locked: true, requirement: '连续登录7天' },
+            dark: { color: '#2b2d4a', name: '暗黑骑士', locked: true, requirement: '吃掉10个Bot' },
+            ice: { color: '#74c0fc', name: '冰雪女王', locked: true, requirement: '累计练习100分钟' }
+        };
+            red: { color: '#ff6b6b', name: '热情红' },
+            green: { color: '#51cf66', name: '自然绿' },
+            purple: { color: '#a64ac9', name: '神秘紫' },
+            yellow: { color: '#fcc419', name: '阳光黄' },
+            orange: { color: '#ff922b', name: '活力橙' },
+            gold: { color: '#ffd700', name: '黄金传说', locked: true, requirement: '达到50质量' },
+            rainbow: { color: 'rainbow', name: '彩虹渐变', locked: true, requirement: '连续登录7天' },
+            dark: { color: '#2b2d4a', name: '暗黑骑士', locked: true, requirement: '吃掉10个Bot' },
+            ice: { color: '#74c0fc', name: '冰雪女王', locked: true, requirement: '累计练习100分钟' }
+        };
+        
+        let state = {
+            ws: null, selectedSkin: 'blue', unlockedSkins: ['blue', 'red', 'green'],
+            master: null, agent: null, cameraX: 0, cameraY: 0
+        };
+        
+        // 渲染皮肤选择器
+        function renderSkinSelector() {
+            const grid = document.getElementById('skinGrid');
+            grid.innerHTML = '';
+            
+            Object.entries(SKINS).forEach(([id, skin]) => {
+                const item = document.createElement('div');
+                item.className = `skin-item ${state.selectedSkin === id ? 'selected' : ''} ${skin.locked ? 'locked' : ''}`;
+                item.onclick = () => selectSkin(id);
+                
+                let bgColor = skin.color;
+                if (skin.color === 'rainbow') {
+                    bgColor = 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)';
+                    item.style.background = bgColor;
+                }
+                
+                item.innerHTML = `
+                    <div class="skin-preview" style="background: ${skin.color !== 'rainbow' ? skin.color : bgColor}"></div>
+                    <div class="skin-name">${skin.name}</div>
+                    <div class="skin-status">${skin.locked ? '🔒 未解锁' : '✅ 可用'}</div>
+                    ${skin.requirement ? `<div style="font-size: 10px; color: #ffd700; margin-top: 5px;">${skin.requirement}</div>` : ''}
+                `;
+                grid.appendChild(item);
+            });
+        }
+        
+        function selectSkin(id) {
+            if (SKINS[id].locked) return;
+            state.selectedSkin = id;
+            renderSkinSelector();
+        }
+        
+        function startGame() {
+            document.getElementById('skinSelector').style.display = 'none';
+            connect();
+        }
+        
+        function connect() {
+            state.ws = new WebSocket(CONFIG.serverUrl);
+            state.ws.onopen = () => {
+                document.getElementById('connectionStatus').textContent = '✅ 已连接';
+            };
+            state.ws.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                if (message.proto_id === 9001) {
+                    state.playerId = message.data.player_id;
+                    document.getElementById('playerId').textContent = state.playerId;
+                    // 更新皮肤
+                    if (message.data.unlocked_skins) {
+                        state.unlockedSkins = message.data.unlocked_skins;
+                    }
+                } else if (message.proto_id === 1001) {
+                    if (message.data.entities) {
+                        state.master = message.data.entities.find(e => e.type === 'master');
+                        state.agent = message.data.entities.find(e => e.type === 'agent');
+                        if (state.master) {
+                            document.getElementById('mass').textContent = Math.round(state.master.radius * 10) / 10;
+                        }
+                        updateLeaderboard(message.data.entities);
+                    }
+                }
+            };
+        }
+        
+        function updateLeaderboard(entities) {
+            const players = entities.filter(e => e.type === 'master' || e.type === 'enemy')
+                .sort((a, b) => b.radius - a.radius).slice(0, 5);
+            document.getElementById('leaderboard').innerHTML = players.map((p, i) => {
+                const rankColor = i < 3 ? '#ffd700' : '#888';
+                const isMe = p.type === 'master';
+                return `<div class="leaderboard-item" style="display: flex; align-items: center; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <span style="width: 25px; font-weight: bold; color: ${rankColor};">${i+1}</span>
+                    <span style="flex: 1; margin-left: 10px; ${isMe ? 'color: #4ecdc4;' : ''}">${p.name}${isMe ? ' (你)' : ''}</span>
+                    <span style="color: #4ecdc4; font-weight: bold;">${Math.round(p.radius)}</span>
+                </div>`;
+            }).join('');
+        }
+        
+        // 更新团队比分
+        function updateTeamScores(scores) {
+            if (!scores) return;
+            const teamColors = { red: '#ff4444', blue: '#4444ff', green: '#44ff44', yellow: '#ffff44' };
+            const teamNames = { red: '红队', blue: '蓝队', green: '绿队', yellow: '黄队' };
+            
+            const sortedTeams = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+            document.getElementById('teamScores').innerHTML = sortedTeams.map(([team, score]) => 
+                `<div style="display: flex; justify-content: space-between; margin: 3px 0; color: ${teamColors[team]};">
+                    <span>${teamNames[team]}</span>
+                    <span style="font-weight: bold;">${score}</span>
+                 </div>`
+            ).join('');
+        }
+        
+        function quickCommand(cmd) {
+            if (state.ws) state.ws.send(JSON.stringify({ proto_id: 2001, data: { content: cmd } }));
+        }
+        
+        function showHelp() {
+            document.getElementById('helpModal').style.display = 'flex';
+        }
+        
+        function hideHelp(e) {
+            if (!e || e.target.id === 'helpModal') {
+                document.getElementById('helpModal').style.display = 'none';
+            }
+        }
+        
+        function sendCommand() {
+            const input = document.getElementById('chatInput');
+            if (state.ws && input.value.trim()) {
+                state.ws.send(JSON.stringify({ proto_id: 2001, data: { content: input.value.trim() } }));
+                input.value = '';
+            }
+        }
+        
+        function split() {
+            if (state.ws) {
+                state.ws.send(JSON.stringify({ proto_id: 4001 }));
+                AudioSystem.play('split');
+            }
+        }
+        
+        function ejectMass() {
+            if (state.ws) {
+                state.ws.send(JSON.stringify({ proto_id: 5001 }));
+                AudioSystem.play('eject');
+            }
+        }
+        
+        // 初始化
+        renderSkinSelector();
+        
+        // 鼠标控制
+        const canvas = document.getElementById('gameCanvas');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        canvas.addEventListener('mousemove', (e) => {
+            if (state.ws && state.master) {
+                state.ws.send(JSON.stringify({ proto_id: 1001, data: { x: e.clientX, y: e.clientY } }));
+            }
+        });
+        canvas.addEventListener('click', () => split());
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'KeyW') split();
+            if (e.code === 'KeyS') ejectMass();
+        });
+        
+        // 音效系统
+        const sounds = {
+            eat: new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZSA0PVanu87plHQUuh9Dz2YU2Bhxqv+zplkcODVGm5O+4ZSAEMYrO9NqGNAUcafDr6JdJDQtPp+XysWUeBjiS1/LPfS4GI3/R8tOENAcdcO/r4plHDAtQp+XyxGUeBTiOzvTXhDQFHG3A7+SdSQ0MTKjl8b1kHwU3jc3z2YU1BB1tve3plUgNC1Ko5fG+ZSAFNojN89eENAcdcfDr4plGDAtQp+TwxGUfBTiOzvTWgzsGHG3A7+SdSQ0LUqjl8b1kHwU2h87z2YU1BB1xv+zpmkcNC1Ko5fHDZSAF'), // 简化的音效
+            split: new Audio(),
+            powerup: new Audio()
+        };
+        
+        // 播放音效
+        function playSound(type) {
+            if (sounds[type]) {
+                sounds[type].currentTime = 0;
+                sounds[type].play().catch(e => {}); // 忽略自动播放限制
+            }
+        }
+        
+        // 粒子系统
+        const particles = [];
+        
+        function createParticle(x, y, color, type) {
+            const particle = {
+                x, y,
+                vx: (Math.random() - 0.5) * 4,
+                vy: (Math.random() - 0.5) * 4,
+                life: 1.0,
+                decay: 0.02 + Math.random() * 0.03,
+                color,
+                radius: 3 + Math.random() * 3,
+                type
+            };
+            particles.push(particle);
+        }
+        
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= p.decay;
+                p.radius *= 0.95;
+                
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+        
+        function drawParticles() {
+            particles.forEach(p => {
+                ctx.save();
+                ctx.globalAlpha = p.life;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fillStyle = p.color;
+                ctx.fill();
+                ctx.restore();
+            });
+        }
+        
+        const ctx = canvas.getContext('2d');
+        let gameState = { entities: [], foods: [], map_width: 2000, map_height: 1500 };
+        
+        ws.onmessage = (event) => {
+            const message = JSON.parse(event.data);
+            if (message.proto_id === 9001) {
+                state.playerId = message.data.player_id;
+                document.getElementById('playerId').textContent = state.playerId;
+                if (message.data.unlocked_skins) {
+                    state.unlockedSkins = message.data.unlocked_skins;
+                }
+                // 显示团队信息
+                if (message.data.team) {
+                    state.team = message.data.team;
+                    document.getElementById('teamDisplay').style.display = 'block';
+                    document.getElementById('teamName').textContent = message.data.team_name;
+                    document.getElementById('teamName').style.color = message.data.team_color;
+                    document.getElementById('teamScoreBoard').style.display = 'block';
+                    updateTeamScores(message.data.team_scores);
+                }
+            } else if (message.proto_id === 1001) {
+                const oldMass = state.master ? state.master.radius : 20;
+                gameState = message.data;
+                if (message.data.entities) {
+                    state.master = message.data.entities.find(e => e.type === 'master');
+                    state.agent = message.data.entities.find(e => e.type === 'agent');
+                    if (state.master) {
+                        document.getElementById('mass').textContent = Math.round(state.master.radius * 10) / 10;
+                        // 检测到变大了，播放吃食物音效
+                        if (state.master.radius > oldMass + 0.5) {
+                            AudioSystem.play('eat');
+                        }
+                    }
+                    updateLeaderboard(message.data.entities);
+                }
+            } else if (message.proto_id === 7001) {
+                // 道具获得通知
+                showPowerupNotification(message.data);
+            }
+        };
+        
+        function render() {
+            // 更新渲染状态（平滑插值）
+            updateRenderState();
+            
+            // 清空画布
+            ctx.fillStyle = '#0a0a1a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.save();
+            ctx.translate(-camera.x, -camera.y);
+            
+            // 绘制网格
+            ctx.strokeStyle = 'rgba(78,205,196,0.1)';
+            ctx.lineWidth = 1;
+            for (let x = 0; x <= gameState.map_width; x += 100) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, gameState.map_height);
+                ctx.stroke();
+            }
+            for (let y = 0; y <= gameState.map_height; y += 100) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(gameState.map_width, y);
+                ctx.stroke();
+            }
+            
+            // 绘制食物
+            if (gameState.foods) {
+                gameState.foods.forEach(food => {
+                    ctx.beginPath();
+                    ctx.arc(food.x, food.y, food.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = food.color || '#ffe66d';
+                    ctx.fill();
+                    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                });
+            }
+            
+            // 绘制实体（使用插值后的位置）
+            renderEntities.forEach((render, entityId) => {
+                const entity = gameState.entities.find(e => e.entity_id === entityId);
+                if (!entity) return;
+                
+                ctx.beginPath();
+                ctx.arc(render.x, render.y, render.radius, 0, Math.PI * 2);
+                    
+                    let color = entity.color || SKINS[entity.skin_id]?.color || '#4ecdc4';
+                    
+                    // 发光效果
+                    ctx.shadowBlur = 20;
+                    ctx.shadowColor = color;
+                    
+                    if (color === 'rainbow') {
+                        const gradient = ctx.createRadialGradient(entity.x, entity.y, 0, entity.x, entity.y, entity.radius);
+                        gradient.addColorStop(0, '#f093fb');
+                        gradient.addColorStop(0.5, '#f5576c');
+                        gradient.addColorStop(1, '#4ecdc4');
+                        ctx.fillStyle = gradient;
+                    } else {
+                        ctx.fillStyle = color;
+                    }
+                    ctx.fill();
+                    
+                    // 关闭阴影
+                    ctx.shadowBlur = 0;
+                    
+                    // 内部高光
+                    ctx.beginPath();
+                    ctx.arc(entity.x - entity.radius * 0.3, entity.y - entity.radius * 0.3, entity.radius * 0.4, 0, Math.PI * 2);
+                    const highlightGradient = ctx.createRadialGradient(
+                        entity.x - entity.radius * 0.3, entity.y - entity.radius * 0.3, 0,
+                        entity.x - entity.radius * 0.3, entity.y - entity.radius * 0.3, entity.radius * 0.4
+                    );
+                    highlightGradient.addColorStop(0, 'rgba(255,255,255,0.4)');
+                    highlightGradient.addColorStop(1, 'rgba(255,255,255,0)');
+                    ctx.fillStyle = highlightGradient;
+                    ctx.fill();
+                    
+                    // 边框
+                    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                    
+                    // 名字
+                    ctx.fillStyle = 'white';
+                    ctx.font = 'bold 14px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(entity.name || '', entity.x, entity.y - entity.radius - 10);
+                });
+            }
+            
+            // 绘制道具
+            if (gameState.powerups) {
+                gameState.powerups.forEach(powerup => {
+                    const config = POWERUPS[powerup.powerup_type];
+                    // 外圈发光
+                    ctx.beginPath();
+                    ctx.arc(powerup.x, powerup.y, powerup.radius + 5, 0, Math.PI * 2);
+                    ctx.fillStyle = powerup.color + '44';
+                    ctx.fill();
+                    
+                    // 主体
+                    ctx.beginPath();
+                    ctx.arc(powerup.x, powerup.y, powerup.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = powerup.color;
+                    ctx.fill();
+                    
+                    // 边框
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    
+                    // 图标
+                    ctx.fillStyle = 'white';
+                    ctx.font = 'bold 16px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(config.icon, powerup.x, powerup.y + 5);
+                });
+            }
+            
+            // 绘制粒子
+            updateParticles();
+            drawParticles();
+            
+            ctx.restore();
+            requestAnimationFrame(render);
+        }
+        
+        // 道具获得通知
+        function showPowerupNotification(data) {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed; top: 100px; left: 50%; transform: translateX(-50%);
+                background: linear-gradient(135deg, ${POWERUPS[data.powerup_type].color} 0%, #000 100%);
+                color: white; padding: 15px 30px; border-radius: 10px;
+                font-size: 18px; font-weight: bold; z-index: 3000;
+                border: 2px solid ${POWERUPS[data.powerup_type].color};
+                box-shadow: 0 0 30px ${POWERUPS[data.powerup_type].color}44;
+                animation: fadeInOut 3s forwards;
+            `;
+            notification.innerHTML = `${POWERUPS[data.powerup_type].icon} 获得${data.powerup_name}！`;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => notification.remove(), 3000);
+        }
+        
+        // 添加动画样式
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes fadeInOut {
+                0% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+                20% { opacity: 1; transform: translateX(-50%) translateY(0); }
+                80% { opacity: 1; transform: translateX(-50%) translateY(0); }
+                100% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+            }
+        `;
+        document.head.appendChild(style);
+        
+        // 移动端控制
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        if (isMobile) {
+            document.getElementById('mobileControls').style.display = 'block';
+            document.getElementById('controls').style.display = 'none';
+            
+            // 虚拟摇杆
+            const joystick = document.getElementById('joystick');
+            const joystickBase = document.getElementById('joystickBase');
+            let joystickActive = false;
+            let joystickCenter = { x: 60, y: 60 };
+            
+            joystickZone.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                joystickActive = true;
+                updateJoystick(e.touches[0]);
+            }, { passive: false });
+            
+            joystickZone.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                if (joystickActive) {
+                    updateJoystick(e.touches[0]);
+                }
+            }, { passive: false });
+            
+            joystickZone.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                joystickActive = false;
+                joystick.style.left = '35px';
+                joystick.style.top = '35px';
+            }, { passive: false });
+            
+            function updateJoystick(touch) {
+                const rect = joystickZone.getBoundingClientRect();
+                const x = touch.clientX - rect.left - 60;
+                const y = touch.clientY - rect.top - 60;
+                const distance = Math.sqrt(x * x + y * y);
+                const maxDistance = 45;
+                
+                let normalizedX = x;
+                let normalizedY = y;
+                
+                if (distance > maxDistance) {
+                    normalizedX = (x / distance) * maxDistance;
+                    normalizedY = (y / distance) * maxDistance;
+                }
+                
+                joystick.style.left = (35 + normalizedX) + 'px';
+                joystick.style.top = (35 + normalizedY) + 'px';
+                
+                // 发送移动命令
+                if (state.ws && state.master) {
+                    const moveX = state.master.x + (normalizedX / maxDistance) * 100;
+                    const moveY = state.master.y + (normalizedY / maxDistance) * 100;
+                    state.ws.send(JSON.stringify({ proto_id: 1001, data: { x: moveX, y: moveY } }));
+                }
+            }
+            
+            // 移动按钮
+            document.getElementById('mobileSplit').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                split();
+            }, { passive: false });
+            
+            document.getElementById('mobileEject').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                ejectMass();
+            }, { passive: false });
+        }
+        
+        render();
+    </script>
+</body>
+</html>
