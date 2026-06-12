@@ -1,181 +1,243 @@
-# Blob Battle: AI Avatar - MVP Prototype
+# 🎮 球球大作战 - Blob Battle MVP
 
-## 项目结构
+> 一个完整的多人在线竞技游戏实现，支持实时对战、移动端适配和丰富的游戏特性。
+
+## 🎯 项目概述
+
+**球球大作战 MVP** 是一个功能完整的 Web 实时多人游戏原型，复刻了经典"球球大作战"的核心玩法，并添加了多种增强功能。
+
+### 核心特性
+
+- ⚡ **实时多人对战** - WebSocket 低延迟通信
+- 📱 **移动端适配** - 虚拟摇杆和触摸按钮
+- 🎨 **视觉特效** - 60fps、粒子系统、发光效果
+- 🔊 **音效系统** - Web Audio API 程序化音效
+- 👥 **团队模式** - 4队对战系统
+- 🏆 **段位系统** - 7级段位排名
+- 🎨 **皮肤系统** - 10款皮肤，解锁机制
+- ⚡ **道具系统** - 4种增益道具
+
+## 📂 文件结构
+
 ```
 blob-battle-mvp/
-├── server/                 # Node.js 服务端
-│   ├── package.json
-│   └── server.js          # WebSocket 服务器 + AI 逻辑
-├── client/                # Unity 客户端
-│   └── Assets/
-│       └── Scripts/
-│           └── NetworkManager.cs  # 网络通信管理
-└── README.md             # 本文件
+├── client/                      # 游戏客户端
+│   ├── index-v3.html           # V3 完整版（推荐使用）
+│   ├── index-v2.html           # V2 基础版
+│   ├── index-enhanced.html     # 增强版（旧）
+│   └── audio.js                # 音效系统模块
+│
+├── server/                      # 游戏服务器
+│   ├── server-v3.js            # V3 完整版（推荐使用）
+│   ├── server-v2.js            # V2 基础版
+│   ├── server-enhanced.js      # 增强版（旧）
+│   └── package.json            # 服务器依赖
+│
+├── docs/                        # 文档目录
+│   ├── ARCHITECTURE.md         # 架构文档（计划中）
+│   └── API.md                  # API 文档（计划中）
+│
+├── package.json                 # 项目依赖
+├── start.sh                    # Mac/Linux 启动脚本
+├── start-v2.sh                 # V2 启动脚本
+├── README-ENHANCED.md          # V2 增强版说明
+├── README_GAME.md            # 游戏说明（旧）
+├── PHASE2_SUMMARY.md         # 阶段2总结
+├── PHASE3_COMPLETE.md        # 阶段3完成报告
+└── PHASE3_SUMMARY.md         # 阶段3总结
 ```
 
-## 快速开始
+## 🚀 快速启动
 
-### 1. 启动服务端
+### 方式一：使用启动脚本（推荐）
+
 ```bash
+# Mac/Linux
+./start.sh
+
+# 手动执行
+./start-v2.sh
+```
+
+### 方式二：手动启动
+
+```bash
+# 1. 安装依赖
+npm install
+
+# 2. 启动服务器
 cd server
 npm install
-npm start
+node server-v3.js
+
+# 3. 启动客户端（新终端）
+cd ../client
+npx serve -p 8083
+
+# 4. 访问游戏
+open http://localhost:8083/index-v3.html
 ```
 
-服务端将在 `ws://localhost:8080` 启动
+## 🎮 游戏版本说明
 
-### 2. Unity 客户端设置
+| 版本 | 文件 | 状态 | 特性 |
+|------|------|------|------|
+| V3 | `index-v3.html` + `server-v3.js` | ✅ 推荐 | 完整功能：音效、移动端、团队模式、段位、道具 |
+| V2 | `index-v2.html` + `server-v2.js` | ⚠️ 兼容 | 基础功能：分裂、合并、Bot |
+| Enhanced | `index-enhanced.html` | ❌ 废弃 | 旧版本，不建议使用 |
 
-#### 依赖包安装
-在 Unity Package Manager 中安装：
-- **Newtonsoft.Json** (JSON 序列化)
-- **WebSocketSharp** (WebSocket 客户端)
+**建议：使用 V3 版本获得最佳体验。**
 
-或通过 NuGet for Unity 安装：
-```
-Install-Package Newtonsoft.Json
-Install-Package WebSocketSharp
-```
+## 📋 功能详解
 
-#### 场景配置
-1. 创建空 GameObject，命名为 "NetworkManager"
-2. 将 `NetworkManager.cs` 挂载到该对象
-3. 调整 `serverUrl` 为 `ws://localhost:8080`
-4. 运行场景
+### V3 版本新增功能
 
-### 3. 测试指令
+#### 🎨 视觉增强
+- **60fps 渲染**：基于 requestAnimationFrame 的高性能循环
+- **插值动画**：客户端插值平滑过渡服务器状态
+- **粒子系统**：吃掉食物时的爆炸特效
+- **发光效果**：玩家球体发光和阴影渲染
+- **平滑视角**：相机跟随玩家平滑移动
 
-在 Unity Console 或添加 UI 按钮调用：
-```csharp
-// 获取 NetworkManager 实例
-var network = FindObjectOfType<NetworkManager>();
-
-// 发送指令
-network.SendChatCommand("保护我");
-network.SendChatCommand("进攻");
-network.SendChatCommand("集合");
-network.SendChatCommand("随便聊聊");
+#### 🔊 音效系统 (`audio.js`)
+```javascript
+// 音效类型
+AudioSystem.sounds.eat      // 吃食物音效
+AudioSystem.sounds.split    // 分裂音效
+AudioSystem.sounds.eject    // 吐孢子音效
+AudioSystem.sounds.powerup  // 道具音效
+AudioSystem.sounds.levelup  // 升级音效
 ```
 
-## 通信协议
+#### 📱 移动端支持
+```html
+<!-- 虚拟摇杆 -->
+<div id="joystickZone">
+  <div id="joystickBase"></div>
+  <div id="joystick"></div>
+</div>
 
-### ProtoID 9001 - 欢迎包
-```json
-{
-  "proto_id": 9001,
-  "data": {
-    "player_id": "player_xxx",
-    "master_id": "master_xxx",
-    "agent_id": "agent_xxx",
-    "initial_entities": [...]
-  }
-}
+<!-- 触摸按钮 -->
+<button id="mobileSplit">⚡</button>
+<button id="mobileEject">💫</button>
 ```
 
-### ProtoID 1001 - 位置同步
-```json
-{
-  "proto_id": 1001,
-  "data": {
-    "entities": [
-      {
-        "entity_id": "master_xxx",
-        "type": "master",
-        "x": 500.0,
-        "y": 400.0,
-        "radius": 20.0
-      }
-    ]
-  }
-}
+#### 👥 团队模式
+```javascript
+// 4个队伍
+const TEAMS = {
+  red:    { name: '红队', color: '#ff4444', spawnX: 500,  spawnY: 750 },
+  blue:   { name: '蓝队', color: '#4444ff', spawnX: 1500, spawnY: 750 },
+  green:  { name: '绿队', color: '#44ff44', spawnX: 1000, spawnY: 500 },
+  yellow: { name: '黄队', color: '#ffff44', spawnX: 1000, spawnY: 1000 }
+};
 ```
 
-### ProtoID 2001 - 聊天/指令
-```json
-{
-  "proto_id": 2001,
-  "data": {
-    "sender_id": "player_xxx",
-    "target_id": "agent_xxx",
-    "msg_type": "command",
-    "content": "保护我"
-  }
-}
+#### ⚡ 道具系统
+```javascript
+const POWERUPS = {
+  speed:  { name: '加速', color: '#00ff00', duration: 5000, effect: 1.5 },
+  shield: { name: '护盾', color: '#0088ff', duration: 3000, effect: 1 },
+  magnet: { name: '磁力', color: '#ff00ff', duration: 4000, effect: 2 },
+  grow:   { name: '生长', color: '#ff8800', duration: 100,  effect: 1.2 }
+};
 ```
 
-### ProtoID 3001 - AI 决策
-```json
-{
-  "proto_id": 3001,
-  "data": {
-    "agent_id": "agent_xxx",
-    "decision_reason": "Threat detected!",
-    "chat_response": "Don't worry, I've got your back!",
-    "actions": [
-      {
-        "type": "move_to",
-        "params": { "x": 100, "y": 200 }
-      }
-    ]
-  }
-}
+#### 🏆 段位系统
+```javascript
+const TIERS = {
+  bronze:  { name: '青铜', minScore: 0,    icon: '🥉' },
+  silver:  { name: '白银', minScore: 100,  icon: '🥈' },
+  gold:    { name: '黄金', minScore: 300,  icon: '🥇' },
+  platinum:{ name: '铂金', minScore: 600,  icon: '💎' },
+  diamond: { name: '钻石', minScore: 1000, icon: '👑' },
+  master:  { name: '大师', minScore: 1500, icon: '🔥' },
+  king:    { name: '王者', minScore: 2000, icon: '👑' }
+};
 ```
 
-## MVP 功能清单
+## 🔧 开发文档
 
-### ✅ 已实现
-- [x] WebSocket 双通道通信
-- [x] 玩家连接与实体初始化
-- [x] 位置同步 (10Hz)
-- [x] 聊天指令解析
-- [x] 规则基 AI 响应 (保护/进攻/集合)
-- [x] 世界状态广播
+### 通信协议
 
-### 📋 待实现
-- [ ] LLM 集成替换规则 AI
-- [ ] 物理碰撞检测
-- [ ] 分裂/吐孢子机制
-- [ ] 地图边界与食物生成
-- [ ] 多人房间匹配
-- [ ] UI 聊天窗口
-- [ ] Agent 行为可视化
+#### 客户端 → 服务器
 
-## 下一步开发建议
+| proto_id | 动作 | 数据 |
+|----------|------|------|
+| 1001 | 移动 | `{x, y}` |
+| 1002 | 分裂 | `{}` |
+| 1003 | 吐孢子 | `{angle}` |
+| 1004 | 发送消息 | `{message}` |
+| 1005 | 选择队伍 | `{team}` |
+| 1006 | 选择皮肤 | `{skin_id}` |
 
-### Phase 1: 核心玩法验证 (Week 1-2)
-1. 添加基础物理引擎
-2. 实现球球移动、碰撞、吞噬逻辑
-3. 添加简单 Bot 敌人
+#### 服务器 → 客户端
 
-### Phase 2: AI 增强 (Week 3-4)
-1. 接入 GPT-4o-mini API
-2. 设计 System Prompt
-3. 优化指令响应延迟
+| proto_id | 动作 | 数据 |
+|----------|------|------|
+| 2001 | 游戏状态 | `{entities, foods, ejectedMasses}` |
+| 2002 | 排行榜 | `{players}` |
+| 2003 | 玩家消息 | `{sender, message}` |
+| 7001 | 道具获得 | `{player_id, powerup_type}` |
+| 7002 | 段位升级 | `{player_id, old_tier, new_tier}` |
 
-### Phase 3: 多人对战 (Week 5-6)
-1. 房间系统
-2. 队伍匹配
-3. 胜负判定
+### 配置参数
 
-## 技术栈
-- **后端**: Node.js + ws (WebSocket)
-- **前端**: Unity 2022 LTS + C#
-- **通信**: WebSocket (JSON over WS)
-- **AI**: 规则引擎 → LLM (后续)
+```javascript
+// server-v3.js
+const CONFIG = {
+  PORT: 8082,
+  MAP_WIDTH: 2000,
+  MAP_HEIGHT: 1500,
+  FOOD_COUNT: 150,
+  BOT_COUNT: 8
+};
 
-## 常见问题
+// index-v3.html
+const CONFIG = {
+  serverUrl: 'ws://localhost:8082'  // 或自动检测
+};
+```
 
-### Q: WebSocket 连接失败？
-A: 确保服务端已启动，检查防火墙设置，确认 URL 为 `ws://localhost:8080`
+## 🐛 调试
 
-### Q: Unity 收不到消息？
-A: 检查 `Update()` 中的消息队列处理，确保主线程执行
+```bash
+# 查看服务器日志
+tail -f server.log
 
-### Q: AI 响应太慢？
-A: MVP 使用 300ms 模拟延迟，实际部署时优化 LLM 调用或使用边缘计算
+# 浏览器开发者工具
+# 1. 按 F12 打开
+# 2. Console 查看日志
+# 3. Network → WS 查看 WebSocket 消息
+```
+
+## 📝 更新日志
+
+### V3.0 (2024-06-12)
+- ✅ 添加 60fps 流畅渲染和插值动画
+- ✅ 实现音效系统（Web Audio API）
+- ✅ 添加移动端虚拟摇杆和触摸按钮
+- ✅ 实现团队模式（4队对战）
+- ✅ 添加段位系统（青铜到王者）
+- ✅ 实现皮肤发光和粒子特效
+- ✅ 添加道具系统（4种道具）
+- ✅ 实现平滑视角跟随
+- ✅ 添加分裂后自动合并机制
+- ✅ 优化碰撞检测和边界限制
+
+### V2.0 (2024-06-09)
+- ✅ 基础游戏框架
+- ✅ WebSocket 实时通信
+- ✅ 分裂/吐孢子机制
+- ✅ AI Bot 系统
+- ✅ 排行榜系统
+
+## 📞 支持
+
+如有问题，请提交 [GitHub Issue](https://github.com/hongmaple0820/qiuqiu-game/issues)。
 
 ---
 
-**版本**: v0.1.0 MVP  
-**日期**: 2024  
-**状态**: 原型开发中
+<p align="center">
+  Made with ❤️ by 鸿枫
+</p>
