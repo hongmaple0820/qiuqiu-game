@@ -250,16 +250,68 @@ function updateBots() {
     bots.forEach(bot => {
         bot.changeDirTimer++;
         if (bot.splitCooldown > 0) bot.splitCooldown--;
+        
+        // 根据个性决定行为
+        const allPlayers = Array.from(gameEntities.values()).filter(e => 
+            (e.type === 'master' || e.type === 'agent') && e.owner_id !== bot.owner_id
+        );
+        
+        let targetX = bot.targetX;
+        let targetY = bot.targetY;
+        
+        // 寻找最近的目标
+        if (allPlayers.length > 0 && bot.changeDirTimer % 30 === 0) {
+            let nearest = null;
+            let nearestDist = 400; // 探测范围
+            
+            allPlayers.forEach(player => {
+                const dx = player.x - bot.x;
+                const dy = player.y - bot.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (player.radius < bot.radius * 0.85 && dist < nearestDist) {
+                    // 可以吃的小目标
+                    nearest = player;
+                    nearestDist = dist;
+                }
+            });
+            
+            if (nearest) {
+                // 追击
+                targetX = nearest.x;
+                targetY = nearest.y;
+            } else {
+                // 检测威胁
+                allPlayers.forEach(player => {
+                    const dx = player.x - bot.x;
+                    const dy = player.y - bot.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (player.radius > bot.radius * 1.2 && dist < 300) {
+                        // 逃离大球
+                        targetX = bot.x + (bot.x - player.x) * 2;
+                        targetY = bot.y + (bot.y - player.y) * 2;
+                    }
+                });
+            }
+        }
+        
         if (bot.changeDirTimer > 60) {
             bot.changeDirTimer = 0;
             bot.targetX = Math.random() * MAP_WIDTH;
             bot.targetY = Math.random() * MAP_HEIGHT;
+            return;
         }
+        
+        // 移动到目标
+        bot.targetX = targetX;
+        bot.targetY = targetY;
+        
         const dx = bot.targetX - bot.x;
         const dy = bot.targetY - bot.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > 5) {
-            const speed = Math.max(1, 3 - bot.radius / 50);
+            const speed = Math.max(0.5, 2.5 - bot.radius / 50);
             bot.vx = (dx / dist) * speed;
             bot.vy = (dy / dist) * speed;
             bot.x += bot.vx;
@@ -267,6 +319,24 @@ function updateBots() {
         }
         bot.x = Math.max(bot.radius, Math.min(MAP_WIDTH - bot.radius, bot.x));
         bot.y = Math.max(bot.radius, Math.min(MAP_HEIGHT - bot.radius, bot.y));
+    });
+    
+    // AI 伙伴跟随主玩家
+    clients.forEach((clientData, ws) => {
+        const master = gameEntities.get(clientData.masterId);
+        const agent = gameEntities.get(clientData.agentId);
+        if (master && agent && master !== agent && agent.status === 'follow') {
+            const dx = master.x - agent.x;
+            const dy = master.y - agent.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > 60) {
+                const speed = 2;
+                agent.x += (dx / dist) * speed;
+                agent.y += (dy / dist) * speed;
+                agent.x = Math.max(agent.radius, Math.min(MAP_WIDTH - agent.radius, agent.x));
+                agent.y = Math.max(agent.radius, Math.min(MAP_HEIGHT - agent.radius, agent.y));
+            }
+        }
     });
 }
 
@@ -420,6 +490,8 @@ wss.on('connection', (ws, req) => {
     const playerId = 'player_' + uuidv4().slice(0, 8);
     const masterId = 'master_' + uuidv4().slice(0, 8);
     const agentId = 'agent_' + uuidv4().slice(0, 8);
+    const team = assignTeam();
+    const teamConfig = TEAMS[team];
     
     const clientData = {
         playerId, masterId, agentId, team,
@@ -477,8 +549,18 @@ wss.on('connection', (ws, req) => {
             if (proto_id === 1001) {
                 const entity = gameEntities.get(client.masterId);
                 if (entity && data.x !== undefined) {
-                    entity.x = Math.max(0, Math.min(MAP_WIDTH, data.x));
-                    entity.y = Math.max(0, Math.min(MAP_HEIGHT, data.y));
+                    // 计算向目标位置移动的速度
+                    const dx = data.x - entity.x;
+                    const dy = data.y - entity.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 1) {
+                        const speed = Math.min(5, Math.max(1, 6 - entity.radius / 30));
+                        entity.vx = (dx / dist) * speed;
+                        entity.vy = (dy / dist) * speed;
+                    } else {
+                        entity.vx = 0;
+                        entity.vy = 0;
+                    }
                 }
             } else if (proto_id === 2001) {
                 // Chat
@@ -527,14 +609,17 @@ wss.on('connection', (ws, req) => {
 // 游戏循环 - 60Hz
 setInterval(() => {
     try {
-        // 平滑移动插值
+        // 平滑移动
         gameEntities.forEach(entity => {
             if (entity.vx || entity.vy) {
-                // 使用插值计算位置，更平滑
-                entity.x += entity.vx * 0.8;  // 稍微减速使移动更平滑
-                entity.y += entity.vy * 0.8;
-                entity.vx *= 0.95;  // 增加摩擦系数
-                entity.vy *= 0.95;
+                entity.x += entity.vx;
+                entity.y += entity.vy;
+                entity.vx *= 0.92;
+                entity.vy *= 0.92;
+                
+                // 速度太小时归零
+                if (Math.abs(entity.vx) < 0.1) entity.vx = 0;
+                if (Math.abs(entity.vy) < 0.1) entity.vy = 0;
                 
                 // 边界限制
                 entity.x = Math.max(entity.radius, Math.min(MAP_WIDTH - entity.radius, entity.x));

@@ -188,17 +188,12 @@
             dark: { color: '#2b2d4a', name: '暗黑骑士', locked: true, requirement: '吃掉10个Bot' },
             ice: { color: '#74c0fc', name: '冰雪女王', locked: true, requirement: '累计练习100分钟' }
         };
-            red: { color: '#ff6b6b', name: '热情红' },
-            green: { color: '#51cf66', name: '自然绿' },
-            purple: { color: '#a64ac9', name: '神秘紫' },
-            yellow: { color: '#fcc419', name: '阳光黄' },
-            orange: { color: '#ff922b', name: '活力橙' },
-            gold: { color: '#ffd700', name: '黄金传说', locked: true, requirement: '达到50质量' },
-            rainbow: { color: 'rainbow', name: '彩虹渐变', locked: true, requirement: '连续登录7天' },
-            dark: { color: '#2b2d4a', name: '暗黑骑士', locked: true, requirement: '吃掉10个Bot' },
-            ice: { color: '#74c0fc', name: '冰雪女王', locked: true, requirement: '累计练习100分钟' }
-        };
-        
+
+        const CANVAS = document.getElementById('gameCanvas');
+        const CTX = CANVAS.getContext('2d');
+        CANVAS.width = window.innerWidth;
+        CANVAS.height = window.innerHeight;
+
         let state = {
             ws: null, selectedSkin: 'blue', unlockedSkins: ['blue', 'red', 'green'],
             master: null, agent: null, cameraX: 0, cameraY: 0
@@ -242,29 +237,92 @@
         }
         
         function connect() {
-            state.ws = new WebSocket(CONFIG.serverUrl);
-            state.ws.onopen = () => {
-                document.getElementById('connectionStatus').textContent = '✅ 已连接';
+            if (state.ws && state.ws.readyState === WebSocket.OPEN) return;
+            
+            const ws = new WebSocket(CONFIG.serverUrl);
+            state.ws = ws;
+            document.getElementById('connectionStatus').textContent = '连接中...';
+            
+            ws.onopen = () => {
+                document.getElementById('connectionStatus').textContent = '已连接';
+                document.getElementById('playerId').textContent = '等待分配...';
             };
-            state.ws.onmessage = (event) => {
+            
+            ws.onmessage = (event) => {
                 const message = JSON.parse(event.data);
+                
                 if (message.proto_id === 9001) {
                     state.playerId = message.data.player_id;
+                    state.team = message.data.team;
                     document.getElementById('playerId').textContent = state.playerId;
-                    // 更新皮肤
                     if (message.data.unlocked_skins) {
                         state.unlockedSkins = message.data.unlocked_skins;
                     }
+                    if (message.data.team) {
+                        document.getElementById('teamDisplay').style.display = 'block';
+                        document.getElementById('teamName').textContent = message.data.team_name;
+                        document.getElementById('teamName').style.color = message.data.team_color;
+                        document.getElementById('teamScoreBoard').style.display = 'block';
+                        updateTeamScores(message.data.team_scores);
+                    }
                 } else if (message.proto_id === 1001) {
+                    const oldMass = state.master ? state.master.radius : 20;
+                    gameState = message.data;
                     if (message.data.entities) {
                         state.master = message.data.entities.find(e => e.type === 'master');
                         state.agent = message.data.entities.find(e => e.type === 'agent');
+                        // Check if any entity is the current player (uses owner_id)
+                        if (!state.master) {
+                            const myEntities = message.data.entities.filter(e => e.owner_id === state.playerId);
+                            if (myEntities.length > 0) state.master = myEntities[0];
+                        }
                         if (state.master) {
                             document.getElementById('mass').textContent = Math.round(state.master.radius * 10) / 10;
+                            if (state.master.radius > oldMass + 0.5) {
+                                AudioSystem.play('eat');
+                                createParticle(state.master.x, state.master.y, state.master.color || '#4ecdc4', 'eat');
+                            }
                         }
                         updateLeaderboard(message.data.entities);
+                        if (message.data.team_scores) updateTeamScores(message.data.team_scores);
                     }
+                    // Update interpolation targets
+                    if (message.data.entities && state.master) {
+                        message.data.entities.forEach(entity => {
+                            const target = renderTargets.get(entity.entity_id);
+                            if (target) {
+                                target.targetX = entity.x;
+                                target.targetY = entity.y;
+                                target.targetRadius = entity.radius;
+                                target.lastUpdate = Date.now();
+                            } else {
+                                renderTargets.set(entity.entity_id, {
+                                    x: entity.x, y: entity.y, radius: entity.radius,
+                                    targetX: entity.x, targetY: entity.y, targetRadius: entity.radius,
+                                    lastUpdate: Date.now()
+                                });
+                            }
+                        });
+                    }
+                } else if (message.proto_id === 7001) {
+                    showPowerupNotification(message.data);
+                } else if (message.proto_id === 7002) {
+                    // Tier up notification
+                    document.getElementById('connectionStatus').textContent = '段位升级: ' + message.data.new_tier;
                 }
+            };
+            
+            ws.onclose = () => {
+                document.getElementById('connectionStatus').textContent = '断开连接!';
+                state.ws = null;
+                // Auto reconnect in 5 seconds
+                setTimeout(() => {
+                    if (state.ws === null) connect();
+                }, 5000);
+            };
+            
+            ws.onerror = () => {
+                document.getElementById('connectionStatus').textContent = '连接错误';
             };
         }
         
@@ -337,35 +395,17 @@
         renderSkinSelector();
         
         // 鼠标控制
-        const canvas = document.getElementById('gameCanvas');
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        canvas.addEventListener('mousemove', (e) => {
+        CANVAS.addEventListener('mousemove', (e) => {
             if (state.ws && state.master) {
                 state.ws.send(JSON.stringify({ proto_id: 1001, data: { x: e.clientX, y: e.clientY } }));
             }
         });
-        canvas.addEventListener('click', () => split());
+        CANVAS.addEventListener('click', () => split());
         
         document.addEventListener('keydown', (e) => {
             if (e.code === 'KeyW') split();
             if (e.code === 'KeyS') ejectMass();
         });
-        
-        // 音效系统
-        const sounds = {
-            eat: new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZSA0PVanu87plHQUuh9Dz2YU2Bhxqv+zplkcODVGm5O+4ZSAEMYrO9NqGNAUcafDr6JdJDQtPp+XysWUeBjiS1/LPfS4GI3/R8tOENAcdcO/r4plHDAtQp+XyxGUeBTiOzvTXhDQFHG3A7+SdSQ0MTKjl8b1kHwU3jc3z2YU1BB1tve3plUgNC1Ko5fG+ZSAFNojN89eENAcdcfDr4plGDAtQp+TwxGUfBTiOzvTWgzsGHG3A7+SdSQ0LUqjl8b1kHwU2h87z2YU1BB1xv+zpmkcNC1Ko5fHDZSAF'), // 简化的音效
-            split: new Audio(),
-            powerup: new Audio()
-        };
-        
-        // 播放音效
-        function playSound(type) {
-            if (sounds[type]) {
-                sounds[type].currentTime = 0;
-                sounds[type].play().catch(e => {}); // 忽略自动播放限制
-            }
-        }
         
         // 粒子系统
         const particles = [];
@@ -400,94 +440,89 @@
         
         function drawParticles() {
             particles.forEach(p => {
-                ctx.save();
-                ctx.globalAlpha = p.life;
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-                ctx.fillStyle = p.color;
-                ctx.fill();
-                ctx.restore();
+                CTX.save();
+                CTX.globalAlpha = p.life;
+                CTX.beginPath();
+                CTX.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                CTX.fillStyle = p.color;
+                CTX.fill();
+                CTX.restore();
             });
         }
         
-        const ctx = canvas.getContext('2d');
-        let gameState = { entities: [], foods: [], map_width: 2000, map_height: 1500 };
+        // 渲染插值系统 - 平滑过渡服务器状态到60fps
+        const renderTargets = new Map();  // entity_id -> {x,y,radius,targetX,targetY,targetRadius,lastUpdate}
+        const renderEntities = new Map();  // entity_id -> {x,y,radius} (interpolated)
         
-        ws.onmessage = (event) => {
-            const message = JSON.parse(event.data);
-            if (message.proto_id === 9001) {
-                state.playerId = message.data.player_id;
-                document.getElementById('playerId').textContent = state.playerId;
-                if (message.data.unlocked_skins) {
-                    state.unlockedSkins = message.data.unlocked_skins;
-                }
-                // 显示团队信息
-                if (message.data.team) {
-                    state.team = message.data.team;
-                    document.getElementById('teamDisplay').style.display = 'block';
-                    document.getElementById('teamName').textContent = message.data.team_name;
-                    document.getElementById('teamName').style.color = message.data.team_color;
-                    document.getElementById('teamScoreBoard').style.display = 'block';
-                    updateTeamScores(message.data.team_scores);
-                }
-            } else if (message.proto_id === 1001) {
-                const oldMass = state.master ? state.master.radius : 20;
-                gameState = message.data;
-                if (message.data.entities) {
-                    state.master = message.data.entities.find(e => e.type === 'master');
-                    state.agent = message.data.entities.find(e => e.type === 'agent');
-                    if (state.master) {
-                        document.getElementById('mass').textContent = Math.round(state.master.radius * 10) / 10;
-                        // 检测到变大了，播放吃食物音效
-                        if (state.master.radius > oldMass + 0.5) {
-                            AudioSystem.play('eat');
-                        }
-                    }
-                    updateLeaderboard(message.data.entities);
-                }
-            } else if (message.proto_id === 7001) {
-                // 道具获得通知
-                showPowerupNotification(message.data);
+        let gameState = { entities: [], foods: [], map_width: 2000, map_height: 1500 };
+        let camera = { x: 0, y: 0 };
+        
+        function updateRenderState() {
+            const now = Date.now();
+            
+            // 插值所有实体位置
+            renderTargets.forEach((target, entityId) => {
+                const dt = Math.min((now - target.lastUpdate) / 1000, 0.5); // max 500ms
+                const lerpFactor = Math.min(dt * 10, 1); // smooth lerp
+                
+                const render = renderEntities.get(entityId) || { x: target.x, y: target.y, radius: target.radius };
+                render.x += (target.targetX - render.x) * lerpFactor;
+                render.y += (target.targetY - render.y) * lerpFactor;
+                render.radius += (target.targetRadius - render.radius) * lerpFactor;
+                renderEntities.set(entityId, render);
+            });
+            
+            // 清理不存在的实体
+            renderEntities.forEach((_, entityId) => {
+                if (!renderTargets.has(entityId)) renderEntities.delete(entityId);
+            });
+            
+            // 平滑相机跟随玩家
+            if (state.master) {
+                const targetX = state.master.x - CANVAS.width / 2;
+                const targetY = state.master.y - CANVAS.height / 2;
+                camera.x += (targetX - camera.x) * 0.1;
+                camera.y += (targetY - camera.y) * 0.1;
             }
-        };
+        }
         
         function render() {
             // 更新渲染状态（平滑插值）
             updateRenderState();
             
             // 清空画布
-            ctx.fillStyle = '#0a0a1a';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            CTX.fillStyle = '#0a0a1a';
+            CTX.fillRect(0, 0, CANVAS.width, CANVAS.height);
             
-            ctx.save();
-            ctx.translate(-camera.x, -camera.y);
+            CTX.save();
+            CTX.translate(-camera.x, -camera.y);
             
             // 绘制网格
-            ctx.strokeStyle = 'rgba(78,205,196,0.1)';
-            ctx.lineWidth = 1;
+            CTX.strokeStyle = 'rgba(78,205,196,0.1)';
+            CTX.lineWidth = 1;
             for (let x = 0; x <= gameState.map_width; x += 100) {
-                ctx.beginPath();
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, gameState.map_height);
-                ctx.stroke();
+                CTX.beginPath();
+                CTX.moveTo(x, 0);
+                CTX.lineTo(x, gameState.map_height);
+                CTX.stroke();
             }
             for (let y = 0; y <= gameState.map_height; y += 100) {
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(gameState.map_width, y);
-                ctx.stroke();
+                CTX.beginPath();
+                CTX.moveTo(0, y);
+                CTX.lineTo(gameState.map_width, y);
+                CTX.stroke();
             }
             
             // 绘制食物
             if (gameState.foods) {
                 gameState.foods.forEach(food => {
-                    ctx.beginPath();
-                    ctx.arc(food.x, food.y, food.radius, 0, Math.PI * 2);
-                    ctx.fillStyle = food.color || '#ffe66d';
-                    ctx.fill();
-                    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
+                    CTX.beginPath();
+                    CTX.arc(food.x, food.y, food.radius, 0, Math.PI * 2);
+                    CTX.fillStyle = food.color || '#ffe66d';
+                    CTX.fill();
+                    CTX.strokeStyle = 'rgba(255,255,255,0.3)';
+                    CTX.lineWidth = 2;
+                    CTX.stroke();
                 });
             }
             
@@ -496,80 +531,83 @@
                 const entity = gameState.entities.find(e => e.entity_id === entityId);
                 if (!entity) return;
                 
-                ctx.beginPath();
-                ctx.arc(render.x, render.y, render.radius, 0, Math.PI * 2);
+                const ex = render.x;
+                const ey = render.y;
+                const er = render.radius;
+                
+                CTX.beginPath();
+                CTX.arc(ex, ey, er, 0, Math.PI * 2);
                     
                     let color = entity.color || SKINS[entity.skin_id]?.color || '#4ecdc4';
                     
                     // 发光效果
-                    ctx.shadowBlur = 20;
-                    ctx.shadowColor = color;
+                    CTX.shadowBlur = 20;
+                    CTX.shadowColor = color;
                     
                     if (color === 'rainbow') {
-                        const gradient = ctx.createRadialGradient(entity.x, entity.y, 0, entity.x, entity.y, entity.radius);
+                        const gradient = CTX.createRadialGradient(ex, ey, 0, ex, ey, er);
                         gradient.addColorStop(0, '#f093fb');
                         gradient.addColorStop(0.5, '#f5576c');
                         gradient.addColorStop(1, '#4ecdc4');
-                        ctx.fillStyle = gradient;
+                        CTX.fillStyle = gradient;
                     } else {
-                        ctx.fillStyle = color;
+                        CTX.fillStyle = color;
                     }
-                    ctx.fill();
+                    CTX.fill();
                     
                     // 关闭阴影
-                    ctx.shadowBlur = 0;
+                    CTX.shadowBlur = 0;
                     
                     // 内部高光
-                    ctx.beginPath();
-                    ctx.arc(entity.x - entity.radius * 0.3, entity.y - entity.radius * 0.3, entity.radius * 0.4, 0, Math.PI * 2);
-                    const highlightGradient = ctx.createRadialGradient(
-                        entity.x - entity.radius * 0.3, entity.y - entity.radius * 0.3, 0,
-                        entity.x - entity.radius * 0.3, entity.y - entity.radius * 0.3, entity.radius * 0.4
+                    CTX.beginPath();
+                    CTX.arc(ex - er * 0.3, ey - er * 0.3, er * 0.4, 0, Math.PI * 2);
+                    const highlightGradient = CTX.createRadialGradient(
+                        ex - er * 0.3, ey - er * 0.3, 0,
+                        ex - er * 0.3, ey - er * 0.3, er * 0.4
                     );
                     highlightGradient.addColorStop(0, 'rgba(255,255,255,0.4)');
                     highlightGradient.addColorStop(1, 'rgba(255,255,255,0)');
-                    ctx.fillStyle = highlightGradient;
-                    ctx.fill();
+                    CTX.fillStyle = highlightGradient;
+                    CTX.fill();
                     
                     // 边框
-                    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-                    ctx.lineWidth = 3;
-                    ctx.stroke();
+                    CTX.strokeStyle = 'rgba(255,255,255,0.5)';
+                    CTX.lineWidth = 3;
+                    CTX.stroke();
                     
                     // 名字
-                    ctx.fillStyle = 'white';
-                    ctx.font = 'bold 14px Arial';
-                    ctx.textAlign = 'center';
-                    ctx.fillText(entity.name || '', entity.x, entity.y - entity.radius - 10);
-                });
-            }
+                    CTX.fillStyle = 'white';
+                    CTX.font = 'bold 14px Arial';
+                    CTX.textAlign = 'center';
+                    CTX.fillText(entity.name || '', ex, ey - er - 10);
+            });
             
             // 绘制道具
             if (gameState.powerups) {
                 gameState.powerups.forEach(powerup => {
                     const config = POWERUPS[powerup.powerup_type];
                     // 外圈发光
-                    ctx.beginPath();
-                    ctx.arc(powerup.x, powerup.y, powerup.radius + 5, 0, Math.PI * 2);
-                    ctx.fillStyle = powerup.color + '44';
-                    ctx.fill();
+                    CTX.beginPath();
+                    CTX.arc(powerup.x, powerup.y, powerup.radius + 5, 0, Math.PI * 2);
+                    CTX.fillStyle = powerup.color + '44';
+                    CTX.fill();
                     
                     // 主体
-                    ctx.beginPath();
-                    ctx.arc(powerup.x, powerup.y, powerup.radius, 0, Math.PI * 2);
-                    ctx.fillStyle = powerup.color;
-                    ctx.fill();
+                    CTX.beginPath();
+                    CTX.arc(powerup.x, powerup.y, powerup.radius, 0, Math.PI * 2);
+                    CTX.fillStyle = powerup.color;
+                    CTX.fill();
                     
                     // 边框
-                    ctx.strokeStyle = 'white';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
+                    CTX.strokeStyle = 'white';
+                    CTX.lineWidth = 2;
+                    CTX.stroke();
                     
                     // 图标
-                    ctx.fillStyle = 'white';
-                    ctx.font = 'bold 16px Arial';
-                    ctx.textAlign = 'center';
-                    ctx.fillText(config.icon, powerup.x, powerup.y + 5);
+                    CTX.fillStyle = 'white';
+                    CTX.font = 'bold 16px Arial';
+                    CTX.textAlign = 'center';
+                    CTX.fillText(config.icon, powerup.x, powerup.y + 5);
                 });
             }
             
@@ -577,7 +615,7 @@
             updateParticles();
             drawParticles();
             
-            ctx.restore();
+            CTX.restore();
             requestAnimationFrame(render);
         }
         
@@ -619,8 +657,8 @@
             document.getElementById('controls').style.display = 'none';
             
             // 虚拟摇杆
+            const joystickZone = document.getElementById('joystickZone');
             const joystick = document.getElementById('joystick');
-            const joystickBase = document.getElementById('joystickBase');
             let joystickActive = false;
             let joystickCenter = { x: 60, y: 60 };
             
