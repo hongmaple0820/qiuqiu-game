@@ -125,7 +125,7 @@
      - 客户端本地预测移动,服务器校正时平滑过渡
    - [ ]* 14.3 为 InterestManager 编写带宽优化测试,验证实体数增长时同步数据量可控
 
-- [ ] 15. 检查点 - Phase 2+3 前验收
+- [x] 15. 检查点 - Phase 2+3 验收
    - 确保 AgentBrain 三层调度器运行稳定,降级链正确(Strategic 超时 -> Tactical 接管 -> Reflex 保底)
    - 确保 ActionValidator 校验所有 Agent 动作,非法动作被拒绝
    - 确保 Intent 指令系统(轮盘/标点/自然语言)正确汇聚为 Intent Schema

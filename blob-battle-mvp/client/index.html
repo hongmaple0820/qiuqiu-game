@@ -346,7 +346,7 @@
 
             // 绘制所有实体
             state.entities.forEach(entity => {
-                const { x, y, radius, type, name, skin_id } = entity;
+                const { x, y, radius, type, name, isAgent } = entity;
                 
                 ctx.beginPath();
                 ctx.arc(x, y, radius, 0, Math.PI * 2);
@@ -354,7 +354,7 @@
                 // 根据类型设置颜色
                 if (type === 'master') {
                     ctx.fillStyle = '#4ecdc4'; // 青色 - 玩家本体
-                } else if (type === 'agent') {
+                } else if (type === 'agent' || isAgent) {
                     ctx.fillStyle = '#ff6b6b'; // 红色 - AI分身
                 } else if (type === 'food') {
                     ctx.fillStyle = '#ffe66d'; // 黄色 - 食物
@@ -365,15 +365,51 @@
                 }
                 
                 ctx.fill();
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-
-                // 绘制名字
-                ctx.fillStyle = '#ffffff';
-                ctx.font = '12px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText(name, x, y - radius - 5);
+                
+                // Agent 视觉标识: 独特描边 + AI 标签 (REQ-8)
+                if (type === 'agent' || isAgent) {
+                    // 外圈光晕
+                    ctx.beginPath();
+                    ctx.arc(x, y, radius + 3, 0, Math.PI * 2);
+                    ctx.strokeStyle = 'rgba(255, 107, 107, 0.4)';
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([4, 3]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    
+                    // 内圈实线边框
+                    ctx.beginPath();
+                    ctx.arc(x, y, radius, 0, Math.PI * 2);
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    
+                    // AI 标识文本
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = `bold ${Math.max(10, radius * 0.5)}px Arial`;
+                    ctx.textAlign = 'center';
+                    ctx.fillText('AI', x, y + 4);
+                } else {
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+                
+                // 绘制名字 (Agent 名字在 AI 标识下方)
+                if (!isAgent && !type === 'agent') {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = '12px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(name || '', x, y - radius - 5);
+                }
+                
+                // Agent 名字显示在上方
+                if (type === 'agent' || isAgent) {
+                    ctx.fillStyle = '#ff6b6b';
+                    ctx.font = '10px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(name || '', x, y - radius - 8);
+                }
 
                 // 如果是Agent，绘制连线到Master
                 if (type === 'agent' && state.master) {
