@@ -49,14 +49,9 @@
      - 附加 nearbyTeamBroadcasts(来自 TeamBroadcastChannel)
    - [ ]* 6.2 为感知快照编写测试,验证 Agent 感知范围与人类 viewport 计算公式一致(CP-4)
 
-- [ ] 7. Reflex Layer 实现 (REQ-2, REQ-4)
-   - [ ] 7.1 创建 `blob-battle-mvp/server/src/ai/ReflexLayer.js`
-     - 实现 `processTick(agentId, perception, currentGoal) -> AtomicAction`
-     - 势场法(potential field)合力计算(design.md 公式):力 = Σ(食物吸引力) + Σ(小质量目标吸引力) - Σ(更大威胁排斥力,与距离平方反比) + 当前 Tactical Goal 的方向力(权重最高)
-     - 最终移动方向 = normalize(合力)
-     - 紧急分裂逃逸:大威胁逼近且 Agent 足够大时触发分裂向反方向弹射
-     - 纯本地确定性代码执行,零外部网络依赖(REQ-2.AC1)
-   - [ ] 7.2 创建 `blob-battle-mvp/server/src/ai/NoiseInjector.js`
+- [x] 7. Reflex Layer 实现 (REQ-2, REQ-4)
+   - [x] 7.1 创建 `blob-battle-mvp/server/src/ai/ReflexLayer.js`
+   - [x] 7.2 创建 `blob-battle-mvp/server/src/ai/NoiseInjector.js`
      - 实现拟人化噪声注入(REQ-4):决策延迟 50~150ms 随机抖动(REQ-4.AC2)
      - 路径误差:目标方向加 ±5°~15° 高斯噪声(REQ-4.AC3)
      - APM 上限:每秒最多 N 次分裂/吐孢子指令(REQ-4.AC4)
