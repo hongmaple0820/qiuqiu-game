@@ -59,20 +59,10 @@
      - 噪声注入发生在 Reflex 层输出 AtomicAction 之前,记录 original_direction 和 delay_ms
    - [ ]* 7.3 为 Reflex Layer 编写单元测试(TS-1):势场法合力计算、边界避障、紧急分裂逃逸方向、噪声注入参数生效
 
-- [ ] 8. Tactical Layer 实现 (REQ-2, REQ-3)
-   - [ ] 8.1 创建 `blob-battle-mvp/server/src/ai/TacticalLayer.js`
-     - 实现 `evaluate(agentId, perception, pendingIntent) -> Goal`
-     - Utility AI 打分系统(design.md 公式):score(goal) = w1*收益预估 - w2*风险预估 + w3*团队信号一致性 - w4*切换成本
-     - 收益预估:吃到的质量/战术价值
-     - 风险预估:被反吃概率,基于附近威胁质量分布
-     - 团队信号一致性:是否响应了队友广播的战术提案
-     - 切换成本:是否需要打断当前正在执行的目标
-     - 本地执行,零外部网络依赖(REQ-2.AC2)
-     - 事件驱动(发现敌人/队友求援) + 心跳(0.3~1s)
-   - [ ] 8.2 创建 `blob-battle-mvp/server/src/ai/TacticalPrimitives.js`
-     - 实现标准战术原语库(REQ-6.AC4):pincer_attack(夹击)、bait(诱饵)、merge_rally(合体冲锋)、feed(投喂)、screen(掩护)
-     - 每个原语定义角色分配逻辑和执行条件
-   - [ ] 8.3 创建 `blob-battle-mvp/server/src/ai/TeamBroadcastChannel.js`
+- [x] 8. Tactical Layer 实现 (REQ-2, REQ-3)
+   - [x] 8.1 创建 `blob-battle-mvp/server/src/ai/TacticalLayer.js`
+   - [x] 8.2 创建 `blob-battle-mvp/server/src/ai/TacticalPrimitives.js`
+   - [x] 8.3 创建 `blob-battle-mvp/server/src/ai/TeamBroadcastChannel.js`
      - 实现 team 广播频道,群聊式发布订阅范式(REQ-6.AC1)
      - `broadcastProposal(agentId, proposal)`:发送 Tactical Proposal 到频道(REQ-6.AC2)
      - `receiveProposals(agentId)`:获取频道内所有未过期提案(REQ-6.AC3)
