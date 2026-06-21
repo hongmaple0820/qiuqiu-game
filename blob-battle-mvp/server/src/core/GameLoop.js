@@ -199,8 +199,9 @@ class GameLoop {
       this.lastSendTime = now;
     }
 
-    // 9. 检查淘汰与游戏结束
+    // 9. 检查淘汰/断连/游戏结束
     this._checkEliminations(room, tick);
+    this._checkDisconnectedPlayers(room, tick);
     this._checkGameOver(room);
   }
 
@@ -392,6 +393,64 @@ class GameLoop {
           agentEntity.status = 'eaten';
           this.agentBrain.eliminateAgent(agentEntity.entity_id, tick);
         }
+      }
+    }
+  }
+
+  // ===== Disconnect Handling (EH-3) =====
+
+  /**
+   * 处理玩家断连
+   * 保留实体 30 秒,Agent 按最后一次指令自主行动
+   */
+  handlePlayerDisconnect(playerId) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+
+    player.disconnectedAt = Date.now();
+    player.connected = false;
+    console.log(`[GameLoop] Player ${playerId} disconnected, keeping alive for ${GameConfig.DISCONNECT_KEEP_ALIVE_SEC}s`);
+  }
+
+  /**
+   * 处理玩家重连
+   */
+  handlePlayerReconnect(playerId) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+
+    player.disconnectedAt = null;
+    player.connected = true;
+    console.log(`[GameLoop] Player ${playerId} reconnected`);
+  }
+
+  /**
+   * 检查断连超时玩家 (每个 tick)
+   */
+  _checkDisconnectedPlayers(room, tick) {
+    const now = Date.now();
+    const timeoutMs = GameConfig.DISCONNECT_KEEP_ALIVE_SEC * 1000;
+
+    for (const player of room.players) {
+      if (!player.disconnectedAt || player.connected) continue;
+
+      if (now - player.disconnectedAt >= timeoutMs) {
+        // 超时: 移除玩家实体
+        console.log(`[GameLoop] Player ${player.id} timed out after disconnect`);
+
+        // 标记主人的实体为 eaten
+        const master = room.entities.find(e => e.entity_id === player.masterEntityId);
+        if (master) master.status = 'eaten';
+
+        const agent = room.entities.find(e => e.entity_id === player.agentEntityId);
+        if (agent) {
+          agent.status = 'eaten';
+          this.agentBrain.eliminateAgent(agent.entity_id, tick);
+        }
+
+        // 清理
+        this.interest.removePlayer(player.id);
+        room.players = room.players.filter(p => p.id !== player.id);
       }
     }
   }

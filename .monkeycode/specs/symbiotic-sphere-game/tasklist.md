@@ -139,9 +139,12 @@
    - [x] 16.4 SemanticCache.js (相似 prompt 结果缓存复用)
    - 注意: 需设置 CLAUDE_API_KEY 环境变量后启用 LLM 调用
 
-- [ ] 17. Agent 视觉标识实现 (REQ-8.AC4)
-   - [ ] 17.1 在客户端渲染层实现 Agent 视觉标识
-     - Agent 控制的球显示独特图标/描边,与人类玩家球视觉区分
+- [x] 17. Agent 视觉标识实现 (REQ-8.AC4) 
+   - 客户端: Agent 球虚线光晕描边 + AI 标签 + 红色名字
+
+- [x] 18. 断连重连 (EH-3)
+   - GameLoop.handlePlayerDisconnect/reconnect
+   - 断连 30s 保留实体 + Agent 自主行动
      - 标识为身份透明设计,不做冒充人类的视觉风格
 
 - [ ] 18. 房间系统与匹配基础 (REQ-9)
