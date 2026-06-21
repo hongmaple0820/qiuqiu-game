@@ -69,8 +69,8 @@
      - Tactical Layer 根据打分系统决定是否响应,基于 confidence 置信度加权采纳(REQ-6.AC5)
    - [ ]* 8.4 为 Tactical Layer 编写单元测试(TS-2):Utility AI 打分公式权重验证、战术原语角色分配逻辑、置信度加权采纳
 
-- [ ] 9. Agent Memory 系统实现 (REQ-7)
-   - [ ] 9.1 创建 `blob-battle-mvp/server/src/ai/AgentMemory.js`
+- [x] 9. Agent Memory 系统实现 (REQ-7)
+   - [x] 9.1 创建 `blob-battle-mvp/server/src/ai/AgentMemory.js`
      - L1 战场短期记忆:滚动覆盖最近 N tick 的感知快照和附近威胁评估(REQ-7.AC1)
      - L2 本局战术记忆:记录关键事件(被偷袭位置、可信队友、对手套路特征)(REQ-7.AC2)
      - L3 跨局玩家偏好记忆接口定义(REQ-7.AC3),MVP 阶段先实现内存版,PostgreSQL 持久化后续迭代
