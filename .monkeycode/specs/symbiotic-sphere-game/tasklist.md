@@ -6,8 +6,8 @@
    - 在 `blob-battle-mvp/server/src/config/GameConfig.js` 中定义核心数值常量(REQ-1): MAP_SIZE=14000、SWALLOW_RATIO=1.25、MAX_SPLIT=16、MIN_SPLIT_MASS、MERGE_COOLDOWN=13~30s、EJECT_MASS_UNIT、TICK_RATE=20~30Hz、SEND_RATE=10~20Hz、MAX_ENTITIES_PER_ROOM=64、MAX_AGENTS_PER_PLAYER=1(MVP)
    - [ ]* 1.1 为 Schema 类编写单元测试,验证 Intent/Proposal/Action 字段校验逻辑
 
-- [ ] 2. 物理引擎升级 - 核心规则复刻 (REQ-1)
-   - [ ] 2.1 重构 `Collider.js` 为 `PhysicsEngine.js`,实现 REQ-1 核心物理规则
+- [x] 2. 物理引擎升级 - 核心规则复刻 (REQ-1)
+   - [x] 2.1 重构 `Collider.js` 为 `PhysicsEngine.js`,实现 REQ-1 核心物理规则
      - 将吞噬判定逻辑从现有 `_resolveSingleCollision` 修改为:质量 A >= 质量 B * 1.25 且 A 边界覆盖 B 中心才执行吞噬(REQ-1.AC2)
      - 实现质量-半径关系公式 `r = k * sqrt(mass / pi)` (REQ-1.AC1)
      - 实现速度公式 `v = v_max * (mass_min / mass)^a`,a=0.45 可调(REQ-1.AC1)
