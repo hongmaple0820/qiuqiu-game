@@ -29,8 +29,8 @@
      - 实现 ActionRejected 枚举:MoveToNotNormalized/SplitTooManyParts/SplitBelowMinMass/SplitCoolingDown/EjectBelowMinMass/ApmLimitExceeded
    - [ ]* 3.2 为 ActionValidator 编写穷举边界值测试(TS-4),覆盖:MoveTo 归一化(模长 0/1/>1)、Split 边界(分裂数 16/质量阈值/冷却)、EjectMass 最小质量、APM 多动作拒绝
 
-- [ ] 4. 证据链记录与反作弊基础设施 (REQ-10.AC4)
-   - [ ] 4.1 创建 `blob-battle-mvp/server/src/core/DecisionEvidence.js`
+- [x] 4. 证据链记录与反作弊基础设施 (REQ-10.AC4)
+   - [x] 4.1 创建 `blob-battle-mvp/server/src/core/DecisionEvidence.js`
      - 实现 `recordDecisionEvidence(agentId, inputSnapshot, outputAction)` 方法,记录每次关键决策的输入快照+输出动作
      - 每条证据链记录包含:agentId、tick、input(感知快照摘要)、output(AtomicAction)、timestamp
      - 证据链存储为房间级别数组,局结束时可导出用于复盘/调参/反作弊审计
