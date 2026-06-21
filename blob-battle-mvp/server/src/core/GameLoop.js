@@ -10,6 +10,7 @@ const { AgentBrain, AgentTier } = require('../ai/AgentBrain');
 const PerceptionManager = require('./PerceptionManager');
 const ActionValidator = require('../validator/ActionValidator');
 const DecisionEvidence = require('./DecisionEvidence');
+const InterestManager = require('../gateway/InterestManager');
 const GameConfig = require('../config/GameConfig');
 
 // Tick 序号跟踪器
@@ -40,6 +41,7 @@ class GameLoop {
     this.perception = new PerceptionManager();
     this.validator = new ActionValidator();
     this.evidence = new DecisionEvidence({ verbose: false });
+    this.interest = new InterestManager({ cellSize: 400 });
 
     // 食物和 Virus 生成 tick
     this._lastFoodSpawnTick = 0;
@@ -97,7 +99,7 @@ class GameLoop {
       type: 'master',
       player_id: playerId,
       x: startX, y: startY,
-      radius: 20, mass: GameConfig.STARTING_MASS,
+      radius: GameConfig.DEFAULT_RADIUS, mass: GameConfig.DEFAULT_MASS,
       vx: 0, vy: 0,
       skin_id: 'skin_blue_01',
       name: playerName,
@@ -112,7 +114,7 @@ class GameLoop {
       type: 'agent',
       player_id: playerId,
       x: startX + 30, y: startY + 30,
-      radius: 18, mass: GameConfig.STARTING_MASS,
+      radius: 18, mass: GameConfig.DEFAULT_MASS,
       vx: 0, vy: 0,
       skin_id: 'skin_robot_01',
       name: `${playerName}-AI`,
@@ -128,7 +130,7 @@ class GameLoop {
     // 注册 Agent 到 AgentBrain
     this.agentBrain.registerAgent(
       player.agentEntityId, playerId, AgentTier.TACTICAL_AUTONOMOUS, {
-        mass: GameConfig.STARTING_MASS,
+        mass: GameConfig.DEFAULT_MASS,
         radius: 18,
         position: { x: startX + 30, y: startY + 30 },
         teamId: playerId,
@@ -145,13 +147,15 @@ class GameLoop {
 
     room.status = 'playing';
     this.isRunning = true;
-    this.lastSendTime = Date.now();
 
-    // 初始化食物
+    // Initialize food first
     this._spawnInitialFood(room);
 
     const tickInterval = 1000 / this.config.tickRate;
     this.tickInterval = setInterval(() => this.tick(room), tickInterval);
+
+    // Force first send on next tick
+    this.lastSendTime = 0;
 
     console.log(`[GameLoop] Room ${roomId} started with ${room.players.length} players`);
     return room;
@@ -185,14 +189,17 @@ class GameLoop {
     this._spawnFoods(room, tick);
     this._spawnViruses(room, tick);
 
-    // 7. 网络同步 (按 sendRate)
+    // 7. 更新 Interests 网格 (for network sync)
+    this.interest.updateGrid(room.id, room.entities);
+
+    // 8. 网络同步 (按 sendRate, per-player viewport)
     const now = Date.now();
     if (now - this.lastSendTime >= 1000 / this.config.sendRate) {
-      this._broadcastState(room);
+      this._broadcastPerPlayer(room);
       this.lastSendTime = now;
     }
 
-    // 8. 检查淘汰与游戏结束
+    // 9. 检查淘汰与游戏结束
     this._checkEliminations(room, tick);
     this._checkGameOver(room);
   }
@@ -391,6 +398,30 @@ class GameLoop {
 
   // ===== Network =====
 
+  /**
+   * Per-player broadcast with Interest Management (REQ-11)
+   * Each player only receives entities within their viewport
+   */
+  _broadcastPerPlayer(room) {
+    const tick = this.ticker.get();
+
+    for (const player of room.players) {
+      // Find player's master entity for viewport center
+      const master = room.entities.find(e => e.entity_id === player.masterEntityId);
+      if (!master || master.status !== 'alive') continue;
+
+      const viewportRadius = this.interest.calcViewportRadius(master.mass || GameConfig.DEFAULT_MASS);
+      const currentView = this.interest.getEntitiesInView(
+        room.id, player.id,
+        { x: master.x, y: master.y, mass: master.mass || GameConfig.DEFAULT_MASS },
+        viewportRadius
+      );
+
+      const message = this.interest.buildSyncMessage(room.id, player.id, currentView, tick);
+      this._sendToPlayer(player.id, message);
+    }
+  }
+
   _broadcastState(room) {
     const state = {
       proto_id: 1001,
@@ -487,6 +518,7 @@ class GameLoop {
       this.tickInterval = null;
     }
     this.agentBrain.reset();
+    this.interest.reset();
   }
 
   // ===== Network placeholders (implemented by WebSocket server layer) =====

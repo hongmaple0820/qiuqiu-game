@@ -115,8 +115,8 @@
      - Agent Runtime 与物理 tick 解耦:AgentBrain 产生 AtomicAction 后通过 ActionValidator 进入物理结算
      - 实现断连重连:服务器保留玩家实体 30 秒,期间 Agent 按最后一次指令自主行动(EH-3)
 
-- [ ] 14. Interest Management 与网络同步优化 (REQ-11)
-   - [ ] 14.1 创建 `blob-battle-mvp/server/src/gateway/InterestManager.js`
+- [x] 14. Interest Management 与网络同步优化 (REQ-11)
+   - [x] 14.1 创建 InterestManager.js + 集成到 GameLoop
      - 实现 uniform grid 空间分区(REQ-11.AC2)
      - 每个连接只同步自身 viewport + 缓冲区内的实体增量
      - 增量同步:只发送新出现/消失/显著变化的实体数据
