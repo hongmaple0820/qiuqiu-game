@@ -132,24 +132,12 @@
    - 确保 Interest Management 带宽优化生效
    - 如有疑问请询问用户
 
-- [ ] 16. Strategic Layer - LLM 集成 (REQ-2.AC3, REQ-12)
-   - [ ] 16.1 创建 `blob-battle-mvp/server/src/ai/StrategicLayer.js`
-     - 实现 `callStrategicLayer(agentId, input) -> Promise<Intent>` 异步调用(REQ-2.AC3)
-     - 不阻塞物理 tick,结果写入 AgentBrain 的 pendingIntent 队列
-     - 调用超时阈值 5 秒(EH-1),超时时 Tactical 层用上一个有效目标继续
-   - [ ] 16.2 创建 `blob-battle-mvp/server/src/ai/LLMService.js`(重构现有 LLMAdapter)
-     - 分层模型选择:Strategic 用 Claude Sonnet 量级,Tactical 若需语义理解用 Haiku 量级(REQ-12.AC2)
-     - 实现 Claude API 调用(云端 API,Key Decisions 确认),构造 systemPrompt(人格设定+规则约束)和 userContext(战场状态+指令)
-     - 实现 Prompt Caching:固定系统提示词利用 Claude API prompt caching 降低成本(REQ-12.AC5)
-   - [ ] 16.3 创建 `blob-battle-mvp/server/src/ai/LLMBudgetManager.js`
-     - Agent 级别预算:每分钟最多 N 次 Strategic 调用(REQ-12.AC3)
-     - 房间级别预算:总 LLM 调用上限(REQ-12.AC4)
-     - 降级策略:LLM 超时或失败时 Agent 回退上一个有效目标或默认 Tactical 规则(REQ-12.AC7)
-     - 批处理:同房间多个 Agent Strategic 决策在同一心跳周期内合并为批量调用(REQ-12.AC8)
-   - [ ] 16.4 创建 `blob-battle-mvp/server/src/ai/SemanticCache.js`
-     - 语义缓存:相似战场局面/相似指令的解析结果可缓存复用(REQ-12.AC6)
-     - 基于 promptHash 的缓存查找和存储(design.md ILLMService getCachedResult/cacheResult)
-   - [ ]* 16.5 为 Strategic Layer 编写集成测试(TS-3):NLU 意图解析、LLM 超时降级、预算限流拒绝超额调用(CP-6)
+- [x] 16. Strategic Layer - LLM 集成 (REQ-2.AC3, REQ-12)
+   - [x] 16.1 StrategicLayer.js (异步调用 + 结果写入 AgentBrain)
+   - [x] 16.2 LLMService.js (Claude API 包装 + Prompt 构造 + 降级)
+   - [x] 16.3 LLMBudgetManager.js (Agent/房间级别预算控制)
+   - [x] 16.4 SemanticCache.js (相似 prompt 结果缓存复用)
+   - 注意: 需设置 CLAUDE_API_KEY 环境变量后启用 LLM 调用
 
 - [ ] 17. Agent 视觉标识实现 (REQ-8.AC4)
    - [ ] 17.1 在客户端渲染层实现 Agent 视觉标识
