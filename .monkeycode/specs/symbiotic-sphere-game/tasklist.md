@@ -41,8 +41,8 @@
    - 确保 ActionValidator 所有校验规则生效
    - 确保证据链可正常记录,如有疑问请询问用户
 
-- [ ] 6. 感知快照系统 (REQ-4, design.md PerceptionSnapshot)
-   - [ ] 6.1 创建 `blob-battle-mvp/server/src/core/PerceptionManager.js`
+- [x] 6. 感知快照系统 (REQ-4, design.md PerceptionSnapshot)
+   - [x] 6.1 创建 `blob-battle-mvp/server/src/core/PerceptionManager.js`
      - 实现 `getPerceptionSnapshot(agentId) -> PerceptionSnapshot`,基于 Agent 当前质量计算 viewport 半径
      - viewport 半径计算公式与人类玩家视野一致:基于当前质量缩放,禁止全图视野(REQ-4.AC1)
      - 只包含 viewport 内的实体:visibleEntities、visibleFoods、visibleViruses
