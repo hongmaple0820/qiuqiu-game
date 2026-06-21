@@ -108,8 +108,8 @@
      - 结构化 Intent 发送 (proto_id 2002)
      - Intent 确认回执显示
 
-- [ ] 13. GameCore Tick 调度器重构 (REQ-1, REQ-10, REQ-11)
-   - [ ] 13.1 重构 `GameLoop.js` 为新架构
+- [x] 13. GameCore Tick 调度器重构 (REQ-1, REQ-10, REQ-11)
+   - [x] 13.1 重构 `GameLoop.js` 为全模块新架构
      - Tick 流程:1.清理被吞噬实体 -> 2.AgentBrain 决策(获取感知快照 -> 三层决策 -> ActionValidator 校验 -> 记录证据链) -> 3.应用玩家输入 -> 4.物理更新 -> 5.食物/Virus 生成 -> 6.网络同步(按 sendRate) -> 7.检查淘汰与游戏结束
      - 所有 Agent 动作经过 ActionValidator 校验后才进入物理结算(REQ-10.AC2)
      - Agent Runtime 与物理 tick 解耦:AgentBrain 产生 AtomicAction 后通过 ActionValidator 进入物理结算
