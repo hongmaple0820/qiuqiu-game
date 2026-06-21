@@ -76,14 +76,14 @@
      - L3 跨局玩家偏好记忆接口定义(REQ-7.AC3),MVP 阶段先实现内存版,PostgreSQL 持久化后续迭代
      - L1/L2 存储于内存,L3 MVP 阶段暂存内存+JSON 文件
 
-- [ ] 10. 检查点 - Phase 1+2 验收
+- [x] 10. 检查点 - Phase 1+2 验收
    - 确保 Reflex Layer Agent(L0)能稳定存活、不卡死、不穿墙
    - 确保 Tactical Layer + Team Broadcast 能产生有效的战术提案和置信度加权采纳
    - 确保 NoiseInjector 参数生效,Agent 行为有拟人化抖动
-   - 如有疑问请询问用户
+   - 所有 17 个模块加载验证通过
 
-- [ ] 11. Agent Brain 整合 - 三层决策调度器 (REQ-2, REQ-3, REQ-14)
-   - [ ] 11.1 创建 `blob-battle-mvp/server/src/ai/AgentBrain.js`
+- [x] 11. Agent Brain 整合 - 三层决策调度器 (REQ-2, REQ-3, REQ-14)
+   - [x] 11.1 创建 `blob-battle-mvp/server/src/ai/AgentBrain.js`
      - 整合 ReflexLayer + TacticalLayer + StrategicLayer(预留接口)为统一 AgentBrain
      - AgentTier 枚举:Follower(L0)/CommanderDirected(L1)/TacticalAutonomous(L2)/Persona(L3)(REQ-3)
      - 每个 tick 调度:Reflex(20~30Hz) -> Tactical(事件驱动+0.3~1s心跳) -> Strategic(10~30s心跳+异步)
