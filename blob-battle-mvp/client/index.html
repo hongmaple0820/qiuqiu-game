@@ -50,6 +50,21 @@
             margin-left: 2%;
         }
         #sendBtn:hover { background: #ff6b6b; }
+        .quick-cmds { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+        .cmd-btn {
+            padding: 8px 14px; border: none; border-radius: 6px; color: white;
+            font-size: 13px; cursor: pointer; transition: transform 0.1s;
+        }
+        .cmd-btn:hover { transform: scale(1.05); }
+        .cmd-btn:active { transform: scale(0.95); }
+        .cmd-attack { background: #e74c3c; }
+        .cmd-retreat { background: #e67e22; }
+        .cmd-guard { background: #3498db; }
+        .cmd-move { background: #2ecc71; }
+        .cmd-merge { background: #9b59b6; }
+        .cmd-feed { background: #1abc9c; }
+        .cmd-bait { background: #f39c12; }
+        .cmd-roam { background: #7f8c8d; }
         #status {
             position: absolute;
             top: 10px;
@@ -110,9 +125,18 @@
     <div id="log"></div>
 
     <div id="ui">
-        <h2>🤖 指挥你的AI分身</h2>
+        <h2>指挥你的AI分身</h2>
         <input type="text" id="chatInput" placeholder="输入指令：保护我 / 进攻 / 集合..." />
         <button id="sendBtn">发送指令</button>
+        <div class="quick-cmds">
+            <button class="cmd-btn cmd-attack" onclick="sendIntent('attack')">进攻</button>
+            <button class="cmd-btn cmd-retreat" onclick="sendIntent('retreat')">撤退</button>
+            <button class="cmd-btn cmd-guard" onclick="sendIntent('guard')">保护我</button>
+            <button class="cmd-btn cmd-merge" onclick="sendIntent('merge_rally')">集合</button>
+            <button class="cmd-btn cmd-feed" onclick="sendIntent('feed')">喂食</button>
+            <button class="cmd-btn cmd-bait" onclick="sendIntent('bait')">诱饵</button>
+            <button class="cmd-btn cmd-roam" onclick="sendIntent('free_roam')">自由行动</button>
+        </div>
     </div>
 
     <script>
@@ -229,10 +253,55 @@
                         addLog(`AI说: "${data.chat_response}"`, 'agent');
                     }
                 }
+            } else if (proto_id === 2003) {
+                // Intent 确认回执
+                if (data.success) {
+                    addLog(`指令已接收: ${data.message}`, 'system');
+                } else {
+                    addLog(`指令失败: ${data.message}`, 'system');
+                }
             }
         }
 
-        // 发送聊天指令
+        // 发送结构化 Intent 指令 (proto_id: 2002)
+        function sendIntent(action) {
+            if (!state.connected) {
+                addLog('未连接到服务器', 'system');
+                return;
+            }
+
+            const targetAgent = state.agent ? state.agent.entity_id : 'team_broadcast';
+
+            const msg = {
+                proto_id: 2002,
+                timestamp: Date.now(),
+                data: {
+                    intent_id: 'int_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+                    target_agent: targetAgent,
+                    action: action,
+                    params: {
+                        target_position: null,
+                        target_entity_id: null,
+                        priority: 'high',
+                    },
+                    natural_language_echo: getActionLabel(action),
+                }
+            };
+
+            state.ws.send(JSON.stringify(msg));
+            addLog(`指令: ${getActionLabel(action)}`, 'player');
+        }
+
+        function getActionLabel(action) {
+            const labels = {
+                attack: '进攻', retreat: '撤退', guard: '保护我',
+                merge_rally: '集合', feed: '喂食', bait: '诱饵',
+                move_to: '移动到', hold_position: '原地待命', free_roam: '自由行动',
+            };
+            return labels[action] || action;
+        }
+
+        // 发送聊天指令 (保留原有功能)
         function sendCommand() {
             const command = chatInput.value.trim();
             if (!command || !state.connected) return;

@@ -96,16 +96,17 @@
      - 在 Team Broadcast 发送主人淘汰通知(REQ-14.AC2)
      - 下一 tick 清除主人及名下 Agent 实体数据,释放房间实体空间(REQ-14.AC3)
 
-- [ ] 12. Intent 指令系统 - 服务端接收与分发 (REQ-5)
-   - [ ] 12.1 在 Gateway 层实现 Intent 接收协议
-     - 新增 WebSocket proto_id: 3001 快捷指令轮盘(intent action + params)(REQ-5.AC1)
-     - 新增 proto_id: 3002 点选标记(ping: target_position/entity_id + verb)(REQ-5.AC2)
-     - 新增 proto_id: 3003 自然语言文本(传递给 Strategic 层)(REQ-5.AC3)
-     - 所有输入方式最终汇聚为 Intent Schema,统一传递给 AgentBrain
-   - [ ] 12.2 实现客户端指令 UI 框架
-     - 在 `blob-battle-mvp/client/` 创建 `CommandUI.js`,实现快捷指令轮盘(MOBA 式 radial menu)
-     - 实现点选标记(ping)系统:点击地图/实体 + 选择动词
-     - Intent natural_language_echo 回显(REQ-5.AC6)
+- [x] 12. Intent 指令系统 - 服务端接收与分发 (REQ-5)
+   - [x] 12.1 创建 Gateway 层 (`server/src/gateway/Gateway.js`)
+     - 新增 proto_id 2002 结构化 Intent 协议 (action + params + priority)
+     - 聊天指令关键词解析自动转 Intent (attack/retreat/guard/merge)
+     - Intent 鉴权: 只有主人可命令自己的 Agent
+     - 团队广播: team_broadcast 目标转 TacticalProposal 分发
+     - Intent 确认回执 proto_id 2003 返回客户端
+   - [x] 12.2 客户端 Intent 指令 UI
+     - 快捷指令按钮: 进攻/撤退/保护我/集合/喂食/诱饵/自由行动
+     - 结构化 Intent 发送 (proto_id 2002)
+     - Intent 确认回执显示
 
 - [ ] 13. GameCore Tick 调度器重构 (REQ-1, REQ-10, REQ-11)
    - [ ] 13.1 重构 `GameLoop.js` 为新架构

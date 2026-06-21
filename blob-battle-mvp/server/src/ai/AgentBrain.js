@@ -268,6 +268,23 @@ class AgentBrain {
   }
 
   /**
+   * 获取所有已注册的 Agent ID 列表
+   */
+  getAllAgentIds() {
+    return Array.from(this.agents.keys());
+  }
+
+  /**
+   * 设置待处理的 Intent (由 Gateway 调用)
+   * 在下次 processTick 时生效
+   */
+  setPendingIntent(agentId, intent) {
+    const state = this.agents.get(agentId);
+    if (!state) return;
+    state.pendingIntent = intent;
+  }
+
+  /**
    * 更新 Agent 质量/半径 (物理引擎回调)
    */
   updateAgentPhysics(agentId, mass, radius, splitCount) {
