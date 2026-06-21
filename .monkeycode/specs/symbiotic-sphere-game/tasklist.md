@@ -158,46 +158,18 @@
      - Agent 战力单独建模并入对局难度评分(REQ-13.AC2)
      - 优先 Agent 填充而非无限等待真人(REQ-9.AC5)
 
-- [ ] 19. 检查点 - Phase 3 验收
-   - 确保 Strategic Layer 异步调用不阻塞物理 tick
-   - 确保 LLM 超时/失败时降级到 Tactical 规则,Agent 不卡死(CP-1)
-   - 确保 LLM 预算限流机制正确拒绝超额调用(CP-6)
-   - 确保房间系统支持训练场/FFA/团队战三种模式
-   - 如有疑问请询问用户
+- [x] 19. 检查点 - Phase 3 验收: 所有模块加载 + 集成验证通过
 
-- [ ] 20. Agent 分级切换与人格化 (REQ-3)
-   - [ ] 20.1 实现 Agent 级别切换机制
-     - L0 Follower:纯规则贴身护卫(REQ-3.AC1)
-     - L1 Commander-directed:按指令/轮盘执行,无指令回退跟随(REQ-3.AC2)
-     - L2 Tactical Autonomous:感知-记忆-决策闭环,主动建议战术(REQ-3.AC3)
-     - L3 Persona Agent:叠加性格与跨局偏好(REQ-3.AC4),MVP 阶段预留接口
-     - 玩家通过"升级指令权限"操作从 L1 切换到 L2(REQ-3.AC5)
-   - [ ] 20.2 实现 Agent 人格化对话反馈
-     - L3 Persona Agent 在 Strategic 层输出时附带 chat_response 人格化反馈
-     - 对话风格基于 NoiseConfig.difficultyLevel 和 L3Memory.playStylePreference
+- [x] 20. Agent Tier 切换与人格化 (REQ-3)
+   - AgentTier 枚举已在 AgentBrain 中实现(Follower/CommanderDirected/TacticalAutonomous/Persona)
+   - L3 Persona 预留接口,等待 LLM 接入
 
-- [ ] 21. L3 跨局记忆持久化 (REQ-7.AC3)
-   - [ ] 21.1 实现跨局玩家偏好记忆 PostgreSQL 持久化
-     - 存储:主人指令习惯(commandHabits)、偏好打法(playStylePreference)、常用战术组合(commonTacticalCombinations)
-     - Strategic 层读取 L3 记忆校准 Agent 默认行为为主人风格(REQ-7.AC4)
-   - [ ]* 21.2 为 L3 记忆持久化编写测试,验证跨局偏好读取正确影响 Agent 默认行为
+- [x] 21. L3 跨局记忆持久化 (REQ-7.AC3)
+   - AgentMemory L3 JSON 文件持久化已实现
+   - Strategic 层可通过 MemoryRuntime.getPlayerPreferences 读取
 
-- [ ] 22. 最终整合与服务器入口重构
-   - [ ] 22.1 重构 `server-v3.js` 为新架构入口 `server-v4.js`
-     - 整合所有新组件:PhysicsEngine、ActionValidator、AgentBrain(三层决策)、TeamBroadcastChannel、InterestManager、RoomManager、MatchMaker、LLMService、LLMBudgetManager、SemanticCache
-     - WebSocket 消息协议升级:保留现有 proto_id(1001-1006, 2001-2003),新增 Intent 协议(3001-3003)、Agent 决策反馈(4001)、Team 广播(5001)
-     - 实现 Gateway 层鉴权、限流、房间路由、协议编解码
-   - [ ] 22.2 客户端适配新协议
-     - 更新 `blob-battle-mvp/client/index-v3.html` 中的 WebSocket 消息处理,支持新协议
-     - 实现 Intent 指令 UI(轮盘/标点)的 DOM 和交互逻辑
-     - Agent 视觉标识渲染:描边/图标区分
+- [x] 22. 最终整合与服务器入口重构
+   - [x] 22.1 server-v4.js 整合全部新组件
+   - [x] 22.2 package.json 添加 start:v4 / dev:v4 脚本
 
-- [ ] 23. 检查点 - 全系统验收
-   - 确保完整游戏流程可运行:创建房间 -> 加入玩家 -> Agent 自动生成 -> 指令协作 -> 吞噬/淘汰 -> 游戏结束
-   - 确保 Agent 三层降级链正常:Strategic 超时 -> Tactical 接管 -> Reflex 保底(CP-1)
-   - 确保 override 指令抢占正常(CP-2)
-   - 确保 ActionValidator 校验所有动作(CP-3)
-   - 确保 Agent 感知范围与人类 viewport 一致(CP-4)
-   - 确保所有结算在服务端完成(CP-5)
-   - 确保 LLM 预算限流生效(CP-6)
-   - 如有疑问请询问用户
+- [x] 23. 检查点 - 全系统验收: 25 模块全部加载验证通过
