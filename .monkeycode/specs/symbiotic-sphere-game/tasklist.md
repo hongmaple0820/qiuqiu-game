@@ -1,6 +1,6 @@
 # 需求实施计划 - Symbiotic Sphere
 
-- [ ] 1. 项目结构重组与核心配置初始化
+- [x] 1. 项目结构重组与核心配置初始化
    - 在 `blob-battle-mvp/server/src/` 下创建新的模块目录结构: `core/`(GameLoop 已存在)、`physics/`(Collider 已存在)、`ai/`(DecisionMaker+LLMAdapter 已存在)、`gateway/`、`persistence/`、`schema/`、`validator/`
    - 在 `blob-battle-mvp/server/src/schema/` 创建 `Intent.js`、`TacticalProposal.js`、`AtomicAction.js`、`PerceptionSnapshot.js`、`NoiseConfig.js`、`AgentMemory.js` 数据模型文件,定义 REQ-5 Intent Schema、REQ-6 Tactical Proposal Schema、REQ-10 Atomic Action Schema、design.md 中所有 Schema 的 JavaScript 类
    - 在 `blob-battle-mvp/server/src/config/GameConfig.js` 中定义核心数值常量(REQ-1): MAP_SIZE=14000、SWALLOW_RATIO=1.25、MAX_SPLIT=16、MIN_SPLIT_MASS、MERGE_COOLDOWN=13~30s、EJECT_MASS_UNIT、TICK_RATE=20~30Hz、SEND_RATE=10~20Hz、MAX_ENTITIES_PER_ROOM=64、MAX_AGENTS_PER_PLAYER=1(MVP)
