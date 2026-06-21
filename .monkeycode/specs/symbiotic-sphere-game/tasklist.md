@@ -18,8 +18,8 @@
      - 实现刺球(virus):地图固定密度分布,超质量阈值碰撞强制分裂(REQ-1)
    - [ ]* 2.2 为物理引擎编写边界值单元测试,验证吞噬比例阈值(1.25)、分裂上限(16)、合并冷却、边界限制
 
-- [ ] 3. Action Validator 实现 (REQ-10, CP-3)
-   - [ ] 3.1 创建 `blob-battle-mvp/server/src/validator/ActionValidator.js`
+- [x] 3. Action Validator 实现 (REQ-10, CP-3)
+   - [x] 3.1 创建 `blob-battle-mvp/server/src/validator/ActionValidator.js`
      - 实现 `validate(agentState, action, tick) -> ValidationResult` 接口(design.md IActionValidator)
      - MoveTo 校验:方向向量归一化且模长 <= 1,拒绝瞬移类幻觉指令(REQ-10.AC5)
      - Split 校验:分裂数 < MAX_SPLIT(16) && mass >= MIN_SPLIT_MASS && 冷却已过(REQ-10.AC6)
