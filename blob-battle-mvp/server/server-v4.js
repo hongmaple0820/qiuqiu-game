@@ -1,12 +1,17 @@
 /**
  * Blob Battle: Symbiotic Sphere - Server v4
  * 完整新架构入口: PhysicsEngine v2 + AgentBrain(三层决策) + Gateway + InterestManager
+ * 同时提供 HTTP 静态文件 (客户端) + WebSocket 游戏协议
  * 对应 REQ-1~14
  *
  * 启动: node server-v4.js
+ * HTTP: http://localhost:8084
  * WebSocket: ws://localhost:8084
  */
 
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const WebSocket = require('ws');
 const { GameLoop } = require('./src/core/GameLoop');
 const Gateway = require('./src/gateway/Gateway');
@@ -15,11 +20,15 @@ const GameConfig = require('./src/config/GameConfig');
 class BlobBattleV4Server {
   constructor(options = {}) {
     this.port = options.port || 8084;
-    this.wss = new WebSocket.Server({ port: this.port });
+    this.clientDir = options.clientDir || path.join(__dirname, '..', 'client');
 
-    this.playerSockets = new Map();    // playerId -> WebSocket
-    this.playerRooms = new Map();      // playerId -> roomId
-    this.playerNames = new Map();      // playerId -> string
+    // HTTP + WebSocket 共用服务器
+    this.httpServer = http.createServer((req, res) => this._serveStatic(req, res));
+    this.wss = new WebSocket.Server({ server: this.httpServer });
+
+    this.playerSockets = new Map();
+    this.playerRooms = new Map();
+    this.playerNames = new Map();
 
     this.gameLoop = new GameLoop({
       tickRate: GameConfig.TICK_RATE,
@@ -35,7 +44,6 @@ class BlobBattleV4Server {
       getRoomGameState: () => ({}),
     });
 
-    // 注入网络通信方法到 GameLoop
     this.gameLoop._sendToPlayer = (pid, msg) => this.sendToPlayer(pid, msg);
     this.gameLoop._sendToAllPlayers = (room, msg) => this.broadcastToRoom(room.id, msg);
 
@@ -43,10 +51,10 @@ class BlobBattleV4Server {
     this.createDefaultRoom();
     this.startHealthCheck();
 
-    console.log(`[Server v4] Symbiotic Sphere Server started on ws://localhost:${this.port}`);
-    console.log(`[Server v4] Map: ${GameConfig.MAP_WIDTH}x${GameConfig.MAP_HEIGHT}`);
-    console.log(`[Server v4] Tick rate: ${GameConfig.TICK_RATE}Hz, Send rate: ${GameConfig.SEND_RATE}Hz`);
-    console.log(`[Server v4] Modules: PhysicsEngine v2, AgentBrain, Gateway, InterestManager, ActionValidator, DecisionEvidence`);
+    // 启动 HTTP 服务器 (WebSocket 绑定在同一端口)
+    this.httpServer.listen(this.port, () => {
+      console.log(`[Server v4] HTTP + WebSocket on http://localhost:${this.port}`);
+    });
   }
 
   setupWebSocket() {
@@ -313,12 +321,50 @@ class BlobBattleV4Server {
     return GameConfig.SPEED_V_MAX * Math.pow(GameConfig.SPEED_MASS_MIN / effectiveMass, GameConfig.SPEED_A);
   }
 
+  // ===== Static File Serving =====
+
+  _serveStatic(req, res) {
+    // WebSocket upgrade 请求不处理 (交给 ws 包)
+    if (req.headers.upgrade && req.headers.upgrade.toLowerCase() === 'websocket') return;
+
+    let filePath = req.url === '/' ? '/index.html' : req.url.split('?')[0];
+    filePath = path.join(this.clientDir, filePath);
+
+    // 安全: 防止目录穿越
+    if (!filePath.startsWith(this.clientDir)) {
+      res.writeHead(403);
+      return res.end('Forbidden');
+    }
+
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeTypes = {
+      '.html': 'text/html; charset=utf-8',
+      '.js': 'application/javascript',
+      '.css': 'text/css',
+      '.json': 'application/json',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.svg': 'image/svg+xml',
+      '.ico': 'image/x-icon',
+    };
+
+    fs.readFile(filePath, (err, data) => {
+      if (err) {
+        res.writeHead(404);
+        return res.end('Not Found');
+      }
+      res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'application/octet-stream' });
+      res.end(data);
+    });
+  }
+
   // ===== Shutdown =====
 
   shutdown() {
     console.log('[Server v4] Shutting down...');
     this.gameLoop.stop();
     this.wss.close();
+    this.httpServer.close();
   }
 }
 
