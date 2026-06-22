@@ -6,8 +6,11 @@
   "scripts": {
     "start": "node server.js",
     "start:v4": "node server-v4.js",
+    "start:v5": "node server-v5.js",
+    "start:mobile": "node server-v5.js",
     "dev": "nodemon server.js",
-    "dev:v4": "nodemon server-v4.js"
+    "dev:v4": "nodemon server-v4.js",
+    "dev:v5": "nodemon server-v5.js"
   },
   "dependencies": {
     "ws": "^8.14.2",

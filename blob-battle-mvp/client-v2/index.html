@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#16213e">
+  <title>共生球域 - 移动版</title>
+  <link rel="stylesheet" href="css/mobile.css">
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <div id="debug-touch">左半屏移动 | 右半屏长按指令 | 快速点击右半屏进攻</div>
+
+  <!-- JS Modules (order matters!) -->
+  <script src="src/GameShell.js"></script>
+  <script src="src/TouchInput.js"></script>
+  <script src="src/VirtualJoystick.js"></script>
+  <script src="src/CommandWheel.js"></script>
+  <script src="src/MobileRenderer.js"></script>
+  <script src="src/NetworkSync.js"></script>
+  <script src="src/AudioHaptic.js"></script>
+  <script src="src/UIManager.js"></script>
+
+  <script>
+  (function() {
+    // === Init ===
+    const shell = new GameShell();
+    const canvas = document.getElementById('gameCanvas');
+    const debugEl = document.getElementById('debug-touch');
+
+    const renderer = new MobileRenderer(canvas, {
+      mapWidth: 8000,
+      mapHeight: 8000,
+    });
+
+    const network = new NetworkSync();
+    const joystick = new VirtualJoystick({ radius: 60, maxDrag: 80, deadZone: 5 });
+    const wheel = new CommandWheel();
+    const audio = new AudioHaptic();
+    const ui = new UIManager();
+
+    shell.register('renderer', renderer);
+    shell.register('network', network);
+    shell.register('joystick', joystick);
+    shell.register('wheel', wheel);
+    shell.register('audio', audio);
+    shell.register('ui', ui);
+
+    // === Game State ===
+    const state = {
+      playerId: null,
+      entities: [],
+      master: null,
+      agent: null,
+      mapWidth: 8000,
+      mapHeight: 8000,
+      stats: {
+        joinTime: 0,
+        peakMass: 0,
+        eliminations: 0,
+      },
+    };
+
+    // === Network Callbacks ===
+
+    // 欢迎包 (9001)
+    network.onProto('9001', (data) => {
+      state.playerId = data.player_id;
+      state.mapWidth = data.mapWidth || 8000;
+      state.mapHeight = data.mapHeight || 8000;
+
+      if (data.master) {
+        state.master = data.master;
+        state.entities = [data.master];
+      }
+      if (data.agent) {
+        state.agent = data.agent;
+        state.entities.push(data.agent);
+      }
+
+      if (data.room_id) {
+        state.stats.joinTime = Date.now();
+      }
+    });
+
+    // 状态同步 (1001)
+    network.onProto('1001', (data, fullMsg) => {
+      if (fullMsg.fullSync) {
+        state.entities = data.entities || [];
+      } else {
+        // 增量合并
+        if (data.removed) {
+          const removedIds = new Set(data.removed.map(r => r.entity_id));
+          state.entities = state.entities.filter(e => !removedIds.has(e.entity_id));
+        }
+        if (data.updated) {
+          for (const e of data.updated) {
+            const idx = state.entities.findIndex(ex => ex.entity_id === e.entity_id);
+            if (idx >= 0) { state.entities[idx] = e; }
+            else { state.entities.push(e); }
+          }
+        }
+        if (data.added) {
+          for (const e of data.added) {
+            const idx = state.entities.findIndex(ex => ex.entity_id === e.entity_id);
+            if (idx >= 0) { state.entities[idx] = e; }
+            else { state.entities.push(e); }
+          }
+        }
+      }
+
+      // 更新引用
+      state.master = state.entities.find(e => e.player_id === state.playerId && e.type === 'master') || null;
+      state.agent = state.entities.find(e => e.player_id === state.playerId && (e.isAgent || e.type === 'agent')) || null;
+
+      // 更新峰值质量
+      if (state.master && state.master.mass > state.stats.peakMass) {
+        state.stats.peakMass = state.master.mass;
+      }
+    });
+
+    // Agent 反馈 (3001)
+    network.onProto('3001', (data) => {
+      if (data.chat_response || data.decision_reason) {
+        ui.showToast('AI: ' + (data.chat_response || data.decision_reason), 'info');
+      }
+    });
+
+    // Intent 确认 (2003)
+    network.onProto('2003', (data) => {
+      ui.showToast(data.success ? data.message : '指令失败: ' + data.message,
+        data.success ? 'info' : 'error');
+      if (data.success) {
+        audio.playCommandAck();
+      }
+    });
+
+    // 匹配状态 (9005)
+    network.onProto('9005', (data) => {
+      ui.showToast(data.message, 'info');
+    });
+
+    // 房间分配 (9006)
+    network.onProto('9006', (data) => {
+      ui.showToast(data.message, 'info');
+      // 自动发送加入请求
+      network.sendJoinRoom(data.roomId || 'Player');
+      shell.switchState('playing');
+    });
+
+    // 重连时触发游戏结束
+    network.onConnectionChange((status) => {
+      if (status === 'reconnecting') {
+        shell.switchState('reconnecting');
+      } else if (status === 'failed') {
+        shell.switchState('gameover', {
+          rank: '?',
+          survivalTime: formatTime((Date.now() - state.stats.joinTime) / 1000),
+          peakMass: state.stats.peakMass,
+          eliminations: state.stats.eliminations,
+        });
+      } else if (status === 'connected' && shell.getState() === 'reconnecting') {
+        shell.switchState('playing');
+        ui.hideOverlay();
+      }
+    });
+
+    // === Shell State Handlers ===
+
+    shell.onState('landing',
+      () => {
+        ui.showOverlay('landing');
+        ui.onClick('quick-match', () => {
+          shell.switchState('matchmaking');
+        });
+        ui.onClick('join-room', (code) => {
+          if (code) {
+            network.send({
+              proto_id: 9003,
+              data: { roomCode: code, playerName: 'Player_' + Math.floor(Math.random() * 1000) },
+            });
+          }
+        });
+        ui.onClick('settings', () => {
+          audio.toggleMute();
+          ui.showToast(audio.muted ? '已静音' : '已开启声音', 'info');
+        });
+      },
+      () => { ui.hideOverlay(); }
+    );
+
+    shell.onState('matchmaking',
+      () => {
+        ui.hideOverlay();
+        ui.showToast('正在匹配...', 'info');
+        network.sendQuickMatch('Player_' + Math.floor(Math.random() * 1000));
+      }
+    );
+
+    shell.onState('playing',
+      () => {
+        ui.hideOverlay();
+        debugEl.style.display = 'block';
+        network.sendDeviceInfo();
+      }
+    );
+
+    shell.onState('gameover',
+      (data) => {
+        debugEl.style.display = 'none';
+        ui.showOverlay('gameover', {
+          rank: data?.rank || '?',
+          survivalTime: data?.survivalTime || formatTime((Date.now() - state.stats.joinTime) / 1000),
+          peakMass: data?.peakMass || state.stats.peakMass,
+          eliminations: data?.eliminations || state.stats.eliminations,
+        });
+        ui.onClick('play-again', () => {
+          shell.switchState('matchmaking');
+        });
+        ui.onClick('back-lobby', () => {
+          shell.switchState('landing');
+        });
+        audio.playDeath();
+      }
+    );
+
+    shell.onState('reconnecting',
+      (data) => {
+        debugEl.style.display = 'none';
+        ui.showOverlay('reconnecting', { maxTime: 30000 });
+        const startTime = data?.startTime || Date.now();
+        const timer = setInterval(() => {
+          const elapsed = Date.now() - startTime;
+          ui.updateReconnectTimer(elapsed, 30000);
+          if (elapsed > 30000 || shell.getState() !== 'reconnecting') {
+            clearInterval(timer);
+            if (elapsed > 30000) {
+              shell.switchState('gameover');
+            }
+          }
+        }, 500);
+      }
+    );
+
+    // === Touch Input Setup ===
+    const touchInput = new TouchInput(canvas, {
+      leftRatio: 0.45,
+      rightRatio: 0.55,
+      longpressMs: 200,
+      doubletapMs: 300,
+    });
+
+    touchInput.on('joystickStart', (x, y) => {
+      joystick.activate(x, y);
+    });
+
+    touchInput.on('joystickMove', (dx, dy) => {
+      joystick.update(dx, dy);
+    });
+
+    touchInput.on('joystickEnd', () => {
+      joystick.release();
+    });
+
+    touchInput.on('tap', (pos) => {
+      // 右半屏快速点击 = 进攻
+      network.send({
+        proto_id: 2002,
+        data: {
+          intent_id: 'tap_' + Date.now(),
+          target_agent: state.agent?.entity_id || 'team_broadcast',
+          action: 'attack',
+          params: { priority: 'high' },
+          natural_language_echo: '快速进攻',
+        },
+      });
+      ui.showToast('指令: 进攻', 'info');
+    });
+
+    touchInput.on('doubletap', (pos) => {
+      // 双击 = 紧急撤退
+      network.send({
+        proto_id: 2002,
+        data: {
+          intent_id: 'dbtap_' + Date.now(),
+          target_agent: state.agent?.entity_id || 'team_broadcast',
+          action: 'retreat',
+          params: { priority: 'override' },
+          natural_language_echo: '紧急撤退',
+        },
+      });
+      ui.showToast('指令: 紧急撤退!', 'warn');
+    });
+
+    touchInput.on('wheelShow', (x, y) => {
+      wheel.show(x, y);
+    });
+
+    touchInput.on('wheelMove', (dx, dy) => {
+      wheel.updateAngle(dx, dy);
+    });
+
+    touchInput.on('wheelSelect', () => {
+      const selected = wheel.select();
+      if (selected) {
+        network.send({
+          proto_id: 2002,
+          data: {
+            intent_id: 'wheel_' + Date.now(),
+            target_agent: state.agent?.entity_id || 'team_broadcast',
+            action: selected.action,
+            params: { priority: selected.action === 'retreat' ? 'override' : 'high' },
+            natural_language_echo: selected.label,
+          },
+        });
+        ui.showToast('指令: ' + selected.label, 'info');
+      }
+    });
+
+    // === Main Loop ===
+
+    function gameLoop(timestamp) {
+      // 摇杆方向 -> 网络发送 (每 50ms throttle)
+      const dir = joystick.getDirection();
+      if (dir.magnitude > 0 && shell.getState() === 'playing') {
+        if (!gameLoop._lastJoySend || timestamp - gameLoop._lastJoySend > 50) {
+          network.sendPosition(dir.vx, dir.vy);
+          gameLoop._lastJoySend = timestamp;
+        }
+      }
+
+      // 渲染实体
+      if (shell.getState() === 'playing') {
+        renderer.followTarget(state.master);
+        renderer.render(state.entities, state);
+
+        // 更新 UI
+        if (state.master) {
+          const rank = state.entities
+            .filter(e => e.type === 'master')
+            .sort((a, b) => (b.mass || 0) - (a.mass || 0))
+            .findIndex(e => e.player_id === state.playerId) + 1;
+
+          const leader = state.entities
+            .filter(e => e.type === 'master')
+            .sort((a, b) => (b.mass || 0) - (a.mass || 0))[0];
+
+          ui.updateTopBar({
+            mass: state.master.mass,
+            rank: rank || 1,
+            leaderName: leader?.name || '-',
+          });
+
+          ui.updateMinimap(state.entities, state.master, state.mapWidth, state.mapHeight);
+        }
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+    gameLoop._lastJoySend = 0;
+
+    // === Start ===
+    network.connect();
+    shell.switchState('landing');
+    requestAnimationFrame(gameLoop);
+
+    // === Helpers ===
+
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60);
+      const s = Math.floor(seconds % 60);
+      return m > 0 ? `${m}m${s}s` : `${s}s`;
+    }
+
+    // === Debug ===
+    window.__debug = { shell, state, network, joystick, wheel, renderer, ui, audio };
+  })();
+  </script>
+</body>
+</html>
