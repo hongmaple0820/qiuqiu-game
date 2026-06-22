@@ -227,23 +227,61 @@
             const { proto_id, data } = message;
 
             if (proto_id === 9001) {
-                // 欢迎包
+                // 欢迎包 - 包含初始实体信息
                 state.playerId = data.player_id;
                 playerIdEl.textContent = state.playerId;
                 addLog(`玩家ID: ${state.playerId}`, 'system');
+                
+                // 初始化实体列表(如果服务端提供了)
+                if (data.master && data.agent) {
+                    state.entities = [data.master, data.agent];
+                    state.master = data.master;
+                    state.agent = data.agent;
+                    aiStatusEl.textContent = `在线 (${data.agent.name || 'AI'})`;
+                    aiStatusEl.style.color = '#4ecdc4';
+                }
             } else if (proto_id === 1001) {
-                // 位置同步包
-                if (data.entities) {
+                // 位置同步包 - 支持全量(fullSync/entities)和增量(added/updated/removed)
+                if (message.fullSync) {
+                    // 全量同步: 直接替换实体列表
                     state.entities = data.entities;
-                    
-                    // 找到主人和Agent
-                    state.master = data.entities.find(e => e.type === 'master');
-                    state.agent = data.entities.find(e => e.type === 'agent');
-                    
-                    if (state.agent) {
-                        aiStatusEl.textContent = `在线 (${state.agent.name})`;
-                        aiStatusEl.style.color = '#4ecdc4';
+                } else {
+                    // 增量同步: 合并更新
+                    // 移除已删除实体
+                    if (data.removed) {
+                        const removedIds = new Set(data.removed.map(r => r.entity_id));
+                        state.entities = state.entities.filter(e => !removedIds.has(e.entity_id));
                     }
+                    // 更新/新增实体
+                    if (data.updated) {
+                        for (const e of data.updated) {
+                            const idx = state.entities.findIndex(ex => ex.entity_id === e.entity_id);
+                            if (idx >= 0) {
+                                state.entities[idx] = e;
+                            } else {
+                                state.entities.push(e);
+                            }
+                        }
+                    }
+                    if (data.added) {
+                        for (const e of data.added) {
+                            const idx = state.entities.findIndex(ex => ex.entity_id === e.entity_id);
+                            if (idx >= 0) {
+                                state.entities[idx] = e;
+                            } else {
+                                state.entities.push(e);
+                            }
+                        }
+                    }
+                }
+
+                // 找到主人和Agent
+                state.master = state.entities.find(e => e.type === 'master');
+                state.agent = state.entities.find(e => e.type === 'agent' || e.isAgent);
+
+                if (state.agent) {
+                    aiStatusEl.textContent = `在线 (${state.agent.name})`;
+                    aiStatusEl.style.color = '#4ecdc4';
                 }
             } else if (proto_id === 3001) {
                 // AI决策包

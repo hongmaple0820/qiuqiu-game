@@ -309,10 +309,29 @@ class GameLoop {
   // ===== Player Input =====
 
   _applyPlayerInputs(room) {
-    // 玩家输入已在 server 层直接写入 entity.vx/vy
-    // 这里做边界 clamp
+    // 将玩家目标位置 (targetX/Y, 由 WebSocket 输入设置) 转换为速度向量
     for (const entity of room.entities) {
       if (entity.isMaster && entity.status === 'alive') {
+        // 如果有目标位置,计算朝向目标的速度
+        if (entity.targetX !== undefined && entity.targetY !== undefined) {
+          const dx = entity.targetX - entity.x;
+          const dy = entity.targetY - entity.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (dist > 1) {
+            const maxSpeed = this._calcSpeed(entity.mass);
+            // 距离越近越慢,但不低于最低速度的 20%
+            const speedFactor = Math.min(1.0, dist / 100);
+            const desiredSpeed = Math.max(maxSpeed * 0.1, maxSpeed * speedFactor);
+            entity.vx = (dx / dist) * desiredSpeed;
+            entity.vy = (dy / dist) * desiredSpeed;
+          } else {
+            entity.vx = 0;
+            entity.vy = 0;
+          }
+        }
+
+        // 速度 clamping (安全边界)
         const speed = Math.sqrt(entity.vx * entity.vx + entity.vy * entity.vy);
         const maxSpeed = this._calcSpeed(entity.mass);
         if (speed > maxSpeed) {

@@ -208,15 +208,9 @@ class BlobBattleV4Server {
     );
 
     if (master && payload.x !== undefined) {
-      master.x = payload.x;
-      master.y = payload.y;
-
-      // 计算速度方向
-      const speed = this._calcSpeed(master.mass || GameConfig.DEFAULT_MASS);
-      if (payload.vx !== undefined) {
-        master.vx = Math.max(-speed, Math.min(speed, payload.vx));
-        master.vy = Math.max(-speed, Math.min(speed, payload.vy));
-      }
+      // 存储目标位置,在 tick 循环中由 _applyPlayerInputs 转换为速度向量
+      master.targetX = payload.x;
+      master.targetY = payload.y;
     }
   }
 
