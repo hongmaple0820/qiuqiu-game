@@ -166,6 +166,9 @@ class GameLoop {
   tick(room) {
     const tick = this.ticker.next();
 
+    // 0. 检查淘汰 (必须在清理前,因为要找到被吞噬的实体)
+    this._checkEliminations(room, tick);
+
     // 1. 清理被吞噬的实体
     this._cleanEatenEntities(room, tick);
 
@@ -199,8 +202,7 @@ class GameLoop {
       this.lastSendTime = now;
     }
 
-    // 9. 检查淘汰/断连/游戏结束
-    this._checkEliminations(room, tick);
+    // 9. 检查断连/游戏结束
     this._checkDisconnectedPlayers(room, tick);
     this._checkGameOver(room);
   }

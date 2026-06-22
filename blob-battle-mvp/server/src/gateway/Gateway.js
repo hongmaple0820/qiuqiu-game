@@ -136,7 +136,7 @@ class Gateway {
     // 关键词 -> Intent 映射 (REQ-5.AC2)
     const intents = [];
 
-    if (text.includes('攻击') || text.includes('打') || text.includes('attack')) {
+    if (text.includes('攻击') || text.includes('进攻') || text.includes('打') || text.includes('attack')) {
       intents.push({ action: 'attack', priority: 'high' });
     }
     if (text.includes('撤退') || text.includes('跑') || text.includes('retreat') || text.includes('flee')) {

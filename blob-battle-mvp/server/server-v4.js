@@ -297,9 +297,9 @@ class BlobBattleV4Server {
       const aliveCount = room.entities.filter(e => e.status === 'alive').length;
       const playerCount = this.playerSockets.size;
       const evidence = this.gameLoop.evidence.getStats('room_default');
-      const cacheStats = this.gateway.agentBrain ? 'N/A' : 'N/A';
+      const evidence = this.gameLoop.evidence.getStats('room_default');
 
-      console.log(`[Health] Players: ${playerCount} | Entities: ${aliveCount}/${room.entities.length} | Evidence: ${evidence?.records || 0} records | Tick: ${this.gameLoop.ticker.get()}`);
+      console.log(`[Health] Players: ${playerCount} | Entities: ${aliveCount}/${room.entities.length} | Evidence: ${evidence?.totalRecords || 0} records | Tick: ${this.gameLoop.ticker.get()}`);
     }, 10000); // 每 10 秒
   }
 
