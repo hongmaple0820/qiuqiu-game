@@ -20,6 +20,9 @@ class InterestManager {
 
     // playerId -> { lastSyncedEntities: Map<entity_id, SyncState> }
     this.playerStates = new Map();
+
+    // 移动端优化: playerId -> { isMobile, lastFullSyncTime, foodSkipCounter }
+    this.mobilePlayers = new Map();
   }
 
   // ===== Uniform Grid =====
@@ -60,7 +63,13 @@ class InterestManager {
     const grid = this.grids.get(roomId);
     if (!grid || !position) return [];
 
-    const bufferRadius = viewportRadius * this.config.viewportBuffer;
+    // 移动端视野扩展 20% (REQ-M9)
+    const mobileInfo = this.mobilePlayers.get(playerId);
+    const viewportMultiplier = (mobileInfo?.isMobile)
+      ? (this.config.viewportBuffer * 1.2)
+      : this.config.viewportBuffer;
+
+    const bufferRadius = viewportRadius * viewportMultiplier;
     const { minCellX, maxCellX, minCellY, maxCellY } = this._cellRange(
       position.x, position.y, bufferRadius, grid.cellSize,
       grid.mapWidth, grid.mapHeight
@@ -68,6 +77,13 @@ class InterestManager {
 
     const entities = [];
     const seen = new Set();
+
+    // 移动端食物节流计数器
+    let foodSkipCounter = 0;
+    if (mobileInfo?.isMobile) {
+      mobileInfo.foodSkipCounter = (mobileInfo.foodSkipCounter || 0) + 1;
+      foodSkipCounter = mobileInfo.foodSkipCounter;
+    }
 
     for (let cx = minCellX; cx <= maxCellX; cx++) {
       for (let cy = minCellY; cy <= maxCellY; cy++) {
@@ -78,6 +94,11 @@ class InterestManager {
         for (const entity of cell) {
           if (seen.has(entity.entity_id)) continue;
           seen.add(entity.entity_id);
+
+          // 移动端食物节流: 每 3 tick 更新一次食物 (REQ-M9)
+          if (mobileInfo?.isMobile && entity.type === 'food') {
+            if (foodSkipCounter % 3 !== 0) continue;
+          }
 
           // 距离过滤
           const dx = entity.x - position.x;
@@ -154,7 +175,20 @@ class InterestManager {
 
     // 如果变化实体太多,回退到全量同步
     const totalChanges = delta.added.length + delta.updated.length + delta.removed.length;
-    const fullSync = totalChanges > this.config.maxSyncPerFrame;
+    let fullSync = totalChanges > this.config.maxSyncPerFrame;
+
+    // 移动端全量同步频率限制 (REQ-M9): 最多 1 次/5 秒
+    const mobileInfo = this.mobilePlayers.get(playerId);
+    if (mobileInfo?.isMobile && fullSync) {
+      const now = Date.now();
+      const minInterval = (this.config.mobileFullSyncMinInterval || 5) * 1000;
+      if (mobileInfo.lastFullSyncTime && (now - mobileInfo.lastFullSyncTime) < minInterval) {
+        // 强制使用增量同步,即使变化实体较多
+        fullSync = false;
+      } else {
+        mobileInfo.lastFullSyncTime = now;
+      }
+    }
 
     if (fullSync) {
       // 重置状态,全量同步
@@ -192,6 +226,19 @@ class InterestManager {
   }
 
   /**
+   * 标记/取消移动端模式 (REQ-M9)
+   * @param {string} playerId
+   * @param {boolean} isMobile
+   */
+  setMobileMode(playerId, isMobile) {
+    if (!this.mobilePlayers.has(playerId)) {
+      this.mobilePlayers.set(playerId, { isMobile, foodSkipCounter: 0 });
+    } else {
+      this.mobilePlayers.get(playerId).isMobile = isMobile;
+    }
+  }
+
+  /**
    * 获取玩家视野半径 (基于质量)
    */
   calcViewportRadius(mass) {
@@ -204,6 +251,7 @@ class InterestManager {
    */
   removePlayer(playerId) {
     this.playerStates.delete(playerId);
+    this.mobilePlayers.delete(playerId);
   }
 
   /**

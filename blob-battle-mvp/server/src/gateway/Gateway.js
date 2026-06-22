@@ -15,10 +15,15 @@ const PROTO = {
   C2S_INTENT: 2002,        // new: 结构化指令
   C2S_SPLIT: 4001,
   C2S_EJECT: 5001,
+  C2S_DEVICE_INFO: 9002,   // new: 移动端设备信息
+  C2S_ROOM_CODE_JOIN: 9003,// new: 房间码加入
+  C2S_QUICK_MATCH: 9004,   // new: 快速匹配
   S2C_WELCOME: 9001,
   S2C_STATE: 1001,         // 世界状态广播
   S2C_AGENT_STATUS: 3001,  // Agent 状态反馈
   S2C_INTENT_ACK: 2003,    // new: Intent 确认回执
+  S2C_MATCH_STATUS: 9005,  // new: 匹配状态
+  S2C_ROOM_ASSIGNED: 9006, // new: 房间分配通知
 };
 
 class Gateway {
@@ -34,9 +39,14 @@ class Gateway {
     this.playerSockets = deps.playerSockets || new Map();
     this.playerRooms = deps.playerRooms || new Map();
     this.getRoomGameState = deps.getRoomGameState || (() => ({}));
+    this.roomManager = deps.roomManager || null;
+    this.sendToPlayer = deps.sendToPlayer || (() => {});
 
     // Intent 计数器 (用于生成唯一 intent_id)
     this._intentSeq = 0;
+
+    // 移动端设备跟踪: playerId -> { isMobile, screenWidth, screenHeight, networkType }
+    this.mobileDevices = new Map();
   }
 
   /**
@@ -54,8 +64,16 @@ class Gateway {
         return this._handleIntent(playerId, payload, currentTick);
 
       case PROTO.C2S_CHAT:
-        // 自然语言 -> Intent 转换(后续 LLM 接入,当前做简单关键词解析)
         return this._handleChatAsIntent(playerId, payload, currentTick);
+
+      case PROTO.C2S_DEVICE_INFO:
+        return this._handleDeviceInfo(playerId, payload);
+
+      case PROTO.C2S_ROOM_CODE_JOIN:
+        return this._handleRoomCodeJoin(playerId, payload);
+
+      case PROTO.C2S_QUICK_MATCH:
+        return this._handleQuickMatch(playerId, payload);
 
       default:
         return { handled: false, ack: null };
@@ -271,6 +289,132 @@ class Gateway {
         sock.send(JSON.stringify(message));
       }
     }
+  }
+
+  // ===== Mobile Protocol Handlers (REQ-M5, REQ-M9) =====
+
+  /**
+   * 处理移动端设备信息上报
+   * Client -> Server: { proto_id: 9002, data: { screenWidth, screenHeight, networkType } }
+   */
+  _handleDeviceInfo(playerId, payload) {
+    const isMobile = payload.isMobile !== undefined ? payload.isMobile : (
+      payload.screenWidth && payload.screenWidth < 1024
+    );
+
+    this.mobileDevices.set(playerId, {
+      isMobile,
+      screenWidth: payload.screenWidth || 0,
+      screenHeight: payload.screenHeight || 0,
+      networkType: payload.networkType || 'unknown',
+      pixelRatio: payload.pixelRatio || 1,
+    });
+
+    console.log(`[Gateway] Device ${playerId.substr(-8)}: mobile=${isMobile}, ${payload.screenWidth}x${payload.screenHeight}, net=${payload.networkType}`);
+
+    return {
+      handled: true,
+      ack: {
+        proto_id: PROTO.S2C_INTENT_ACK,
+        data: {
+          success: true,
+          message: 'device_info_ack',
+          isMobile,
+        },
+      },
+    };
+  }
+
+  /**
+   * 处理房间码加入请求
+   * Client -> Server: { proto_id: 9003, data: { roomCode, playerName } }
+   */
+  _handleRoomCodeJoin(playerId, payload) {
+    if (!this.roomManager) {
+      return { handled: true, ack: this._buildAck('', false, 'Room system unavailable') };
+    }
+
+    const code = (payload.roomCode || '').toUpperCase();
+    if (!code || code.length !== 6) {
+      return { handled: true, ack: this._buildAck('', false, 'Invalid room code (need 6 chars)') };
+    }
+
+    const playerName = payload.playerName || `Player_${playerId.substr(-4)}`;
+    const result = this.roomManager.joinRoomByCode(playerId, playerName, code);
+
+    if (!result) {
+      return { handled: true, ack: this._buildAck('', false, 'Room not found or full') };
+    }
+
+    return {
+      handled: true,
+      ack: {
+        proto_id: PROTO.S2C_ROOM_ASSIGNED,
+        data: {
+          roomId: result.roomId,
+          roomCode: code,
+          playerCount: result.room.players.length,
+          maxPlayers: result.room.config.maxPlayers,
+          message: `Joined room ${code}`,
+        },
+      },
+    };
+  }
+
+  /**
+   * 处理快速匹配请求
+   * Client -> Server: { proto_id: 9004, data: { playerName } }
+   */
+  _handleQuickMatch(playerId, payload) {
+    if (!this.roomManager) {
+      return { handled: true, ack: this._buildAck('', false, 'Match system unavailable') };
+    }
+
+    const playerName = payload.playerName || `Player_${playerId.substr(-4)}`;
+
+    this.roomManager.joinMatchmaking(playerId, playerName, (roomId, players) => {
+      for (const player of players) {
+        if (this.sendToPlayer) {
+          this.sendToPlayer(player.id, {
+            proto_id: PROTO.S2C_ROOM_ASSIGNED,
+            data: {
+              roomId,
+              playerCount: players.length,
+              message: 'Matched! Joining room...',
+            },
+          });
+        }
+      }
+    });
+
+    const status = this.roomManager.getMatchStatus(playerId);
+
+    return {
+      handled: true,
+      ack: {
+        proto_id: PROTO.S2C_MATCH_STATUS,
+        data: {
+          inQueue: true,
+          queuePosition: status.queuePosition,
+          message: `Matching... position ${status.queuePosition}`,
+        },
+      },
+    };
+  }
+
+  /**
+   * 检查玩家是否为移动端
+   */
+  isMobilePlayer(playerId) {
+    const info = this.mobileDevices.get(playerId);
+    return info ? info.isMobile : false;
+  }
+
+  /**
+   * 获取移动端设备信息
+   */
+  getMobileDeviceInfo(playerId) {
+    return this.mobileDevices.get(playerId) || null;
   }
 
   // ===== Private =====
